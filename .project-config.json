@@ -1,0 +1,43 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "server",
+    "db",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://3DdQg2LHdDZNHrD.root:M1vlbG2xIt33jXfvgC83@gateway06.us-east-1.prod.aws.tidbcloud.com:4000/5gmQawzxiJoszdkux2Y8pw?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": [
+    "no_db_push"
+  ],
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663638548180/5gmQawzxiJoszdkux2Y8pw",
+    "access_key_id": "ASIAZV3A2ECZDCXG2RCD",
+    "secret_access_key": "BAogXofvu7H79uXf+VMUQpIJ3mtIpevP97Wbu7Ye",
+    "session_token": "IQoJb3JpZ2luX2VjEPT//////////wEaCXVzLWVhc3QtMSJGMEQCIEo2xpxMIErzOF5cZFAJNTYLVuen3o0qKXJZE5vU4tRVAiAOqdyucbwAFuYOhsMS1VjQz8Tq4YMcDaiOopN6LdnJDSr/Awi9//////////8BEAQaDDY2NTM4NjA5ODg2NiIMwlk2E3E64pILC9EzKtMDwRIhgAbIqBDFOEYgtb6SJoIO4kqhbZyAcAgO+gscQYsiOIyJ9uzJBoMbGvL5ZBIGm8izDsW7QbWgcJPcEqK/8rmSq2VyVsb/Vtlua82m3HvWxp9ARaHnk3cqYPp3FVLNmbZQE0cUVkbIZHS5yCUdtb0IJ4UJpmoNCRr3OADetobKTzGe7h+BMgyrUCAoHTBF4PBnHpYQB71yodEL94v+b+q2qXLM9iJ5kt0n4zGalDqwftBpFouNj0gSP0qWz+FZo9VU8X04l1Detf8VITzXlo8AVVtzlaL1EQ7IzhOWVhLaIO6e2qKJMwm4zhpM8i+Pu8LphyyJ9IT1NAQ6Q7xaJvMiLrZztwF6P/qnhOFaNXqxkOPJgzST88v4IFuqb1IR1E/F6f7MIgiKUi+0tYseVu8s3d+N2tZ4/x55vi3mX7a/Gpk8zBy5eH49XZx7Z4EwoiVFNkWMLqQiTGUPb1WeCUPdC16y1uzyuFdOicT1Xw3vfnrdJOewl0iG04cgsAmL3H+e2GfTYAcXQxBblIk/PSpfmfkv+v0ZayULsBmZdHgz7sXMEvJ187N2tPmziIQT80MHn5WW6N5fdLTQ/neo8sX/A3j+zk6npk0oOT0gS+eMAycwk/Sr0AY6ngEmlHEwTU3N8mnwl7LclnlFcT/S8tlvIsn3A/cHhwFrcGPa2DtutY3YC3rUWTQ8FgbVYweIOP7IiWE0jxMKwtI3qcptUUFdjd+0O/W/rxu/0cDp9dbX9ud7Q3+f+5Tc/OBWFodMfA0gpi/y66lJvKTIjY1qDiygaQS5rr1R4mln63vMr0QQS7au1liTHbe7Vm04/pVl1HU+mWnmClm4SQ==",
+    "expiration": "2026-05-18T23:37:55.000Z"
+  },
+  "name": "oanda-v3-bot",
+  "path": "/home/ubuntu/oanda-v3-bot",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "VmQJqkh8aMqPeXDeZvdfKX",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "JWT_SECRET": "gcU6Dctef8v3jot8yTZc5Z",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "Bizvoice",
+    "OWNER_OPEN_ID": "8UM2wWyxrCsEDmm9K5DuGC",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "cbbe6c8a-fd32-48d1-a708-0949f7cb81b2",
+    "VITE_APP_ID": "5gmQawzxiJoszdkux2Y8pw",
+    "VITE_APP_LOGO": "",
+    "VITE_APP_TITLE": "OANDA v3 Real-Time Autotrader",
+    "VITE_FRONTEND_FORGE_API_KEY": "imEjPvkC6nD4qgj6SXCGdj",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}
