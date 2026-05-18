@@ -18,9 +18,11 @@ import {
   getAdaptiveThresholds,
   updateAdaptiveThresholds,
 } from "./trading";
+import { diagnosticsRouter } from "./diagnostics-router";
 
 export const appRouter = router({
   system: systemRouter,
+  diagnostics: diagnosticsRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
