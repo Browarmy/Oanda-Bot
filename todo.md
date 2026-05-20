@@ -65,3 +65,27 @@
 - [x] TypeScript compilation successful
 
 ## Completed
+
+## Multi-Instrument Scanner (NEW)
+- [x] Create multi-bot-manager.ts with 20+ major FX pairs scanning
+- [x] Implement per-pair signal evaluation (EMA, RSI, MACD, ADX, Stochastic RSI)
+- [x] Implement concurrent position tracking per instrument
+- [x] Wire multi-bot into tRPC routers (getMultiStatus, startMulti, stopMulti, updateMultiConfig, updateMultiSessions)
+- [x] Create MarketScanner component to display all pairs with signal strength and trend
+- [x] Add Market Scanner tab to Dashboard
+- [x] Create Watchlist Editor to enable/disable specific pairs
+- [x] Wire WatchlistEditor to real multi-bot status (getMultiStatus)
+- [x] Add per-pair risk limit configuration (global risk with per-pair tracking)
+- [x] Implement performance heatmap showing win rate by pair and session
+- [x] Fix heatmap to use correct trade timestamps (openTime)
+
+## Render Deployment (NEW)
+- [x] Create comprehensive Render deployment guide (RENDER_DEPLOYMENT.md)
+- [x] Create quick-start deployment script (RENDER_QUICK_START.md)
+- [x] Create environment variable template (.env.render.example)
+- [ ] Deploy to Render free tier
+- [ ] Verify multi-pair streaming on Render
+- [ ] Test order placement and trade execution
+- [ ] Monitor performance for 24-48 hours
+- [ ] Optimize signal filter for 75-90% win rate target
+- [ ] Analyze performance heatmap and adjust watchlist
