@@ -19,6 +19,9 @@ import {
   updateAdaptiveThresholds,
 } from "./trading";
 import { diagnosticsRouter } from "./diagnostics-router";
+import { MultiBotManager } from "./multi-bot-manager";
+
+const multiBotManager = new MultiBotManager();
 
 export const appRouter = router({
   system: systemRouter,
@@ -31,6 +34,38 @@ export const appRouter = router({
       return {
         success: true,
       } as const;
+    }),
+  }),
+
+  // Multi-instrument bot
+  multiBot: router({
+    getMultiStatus: protectedProcedure.query(async ({ ctx }) => {
+      return multiBotManager.getStatus();
+    }),
+
+    startMulti: protectedProcedure.mutation(async ({ ctx }) => {
+      await multiBotManager.startMultiBot();
+      return { success: true, status: multiBotManager.getStatus() };
+    }),
+
+    stopMulti: protectedProcedure.mutation(async ({ ctx }) => {
+      multiBotManager.stopMultiBot();
+      return { success: true };
+    }),
+
+    updateMultiConfig: protectedProcedure
+      .input(z.object({
+        riskPercent: z.number().optional(),
+        enabledPairs: z.array(z.string()).optional(),
+        maxConcurrentTrades: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        multiBotManager.updateConfig(input);
+        return { success: true, status: multiBotManager.getStatus() };
+      }),
+
+    getAvailablePairs: protectedProcedure.query(async ({ ctx }) => {
+      return multiBotManager.getAvailablePairs();
     }),
   }),
 
