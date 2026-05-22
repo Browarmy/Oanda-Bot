@@ -179,6 +179,15 @@
 html, body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  /* Ensure content fills safe areas */
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+/* Prevent content from going under the notch */
+#root {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
 }
 
 /* Status dot pulse animation */

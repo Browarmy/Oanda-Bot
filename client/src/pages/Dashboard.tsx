@@ -142,7 +142,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   if (!isConnected && connectMutation.isPending) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4"
-        style={{ background: C.bg }}>
+        style={{ background: C.bg, paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="w-16 h-16 rounded-3xl flex items-center justify-center"
           style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)", boxShadow: "0 0 40px #f5a62340" }}>
           <Zap className="w-8 h-8" style={{ color: C.bg }} />
@@ -180,8 +180,16 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     <div className="min-h-screen flex flex-col" style={{ background: C.bg, color: C.text }}>
 
       {/* ── Sticky header ── */}
-      <div className="sticky top-0 z-50 flex items-center justify-between px-5 py-3"
-        style={{ background: "rgba(5, 12, 26, 0.97)", borderBottom: `1px solid ${C.border}`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", zIndex: 100 }}>
+      <div className="sticky top-0 z-50 flex items-center justify-between px-5"
+        style={{
+          background: "rgba(5, 12, 26, 0.97)",
+          borderBottom: `1px solid ${C.border}`,
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          zIndex: 100,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+          paddingBottom: "12px",
+        }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)" }}>

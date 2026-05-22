@@ -47,7 +47,10 @@ export default function Welcome({ onConnected }: WelcomeProps) {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-5 relative overflow-hidden"
-      style={{ background: "linear-gradient(135deg, #050c1a 0%, #0a1628 50%, #0d1f3a 100%)" }}>
+      style={{
+        background: "linear-gradient(135deg, #050c1a 0%, #0a1628 50%, #0d1f3a 100%)",
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 20px)",
+      }}>
 
       {/* Background glow orbs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
