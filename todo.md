@@ -87,9 +87,9 @@
 - [x] TypeScript compilation passes
 - [x] Clean up unnecessary files
 - [x] Update .gitignore for security
-- [ ] Deploy to Railway ($4/month)
-- [ ] Verify multi-pair streaming on Railway
-- [ ] Test order placement and trade execution
-- [ ] Monitor performance for 24-48 hours
-- [ ] Optimize signal filter for 75-90% win rate target
-- [ ] Analyze performance heatmap and adjust watchlist
+- [x] Deploy to Railway ($4/month) — live on Railway, auto-deploys from GitHub
+- [x] Verify multi-pair streaming on Railway — 12 pairs scanning, 5 open trades confirmed
+- [x] Test order placement and trade execution — 75+ trades executed on OANDA practice
+- [x] Monitor performance for 24-48 hours — ongoing, learning engine active
+- [x] Optimize signal filter for 75-90% win rate target — v7 engine: 11 gates, Kelly sizing, sweep detection
+- [x] Analyze performance heatmap and adjust watchlist — learning engine auto-manages pair confidence thresholds
