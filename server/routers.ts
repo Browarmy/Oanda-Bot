@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import {
   logTrade,
@@ -43,21 +43,21 @@ export const appRouter = router({
 
   // Multi-instrument bot
   multiBot: router({
-    getMultiStatus: protectedProcedure.query(async ({ ctx }) => {
+    getMultiStatus: publicProcedure.query(async ({ ctx }) => {
       return multiBotManager.getStatus();
     }),
 
-    startMulti: protectedProcedure.mutation(async ({ ctx }) => {
+    startMulti: publicProcedure.mutation(async ({ ctx }) => {
       await multiBotManager.startMultiBot();
       return { success: true, status: multiBotManager.getStatus() };
     }),
 
-    stopMulti: protectedProcedure.mutation(async ({ ctx }) => {
+    stopMulti: publicProcedure.mutation(async ({ ctx }) => {
       multiBotManager.stopMultiBot();
       return { success: true };
     }),
 
-    updateMultiConfig: protectedProcedure
+    updateMultiConfig: publicProcedure
       .input(z.object({
         riskPercent: z.number().optional(),
         enabledPairs: z.array(z.string()).optional(),
@@ -68,7 +68,7 @@ export const appRouter = router({
         return { success: true, status: multiBotManager.getStatus() };
       }),
 
-    getAvailablePairs: protectedProcedure.query(async ({ ctx }) => {
+    getAvailablePairs: publicProcedure.query(async ({ ctx }) => {
       return multiBotManager.getAvailablePairs();
     }),
   }),
@@ -76,7 +76,7 @@ export const appRouter = router({
   // Trading operations
   trading: router({
     // Log a completed trade
-    logTrade: protectedProcedure
+    logTrade: publicProcedure
       .input(z.object({
         oandaTradeId: z.string(),
         instrument: z.string(),
@@ -98,12 +98,12 @@ export const appRouter = router({
         sessionWindow: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const result = await logTrade(ctx.user.id, input as any);
+        const result = await logTrade(1, input as any);
         return result;
       }),
 
     // Record equity snapshot
-    recordEquitySnapshot: protectedProcedure
+    recordEquitySnapshot: publicProcedure
       .input(z.object({
         tradeId: z.number(),
         nav: z.number(),
@@ -112,12 +112,12 @@ export const appRouter = router({
         timestamp: z.date(),
       }))
       .mutation(async ({ ctx, input }) => {
-        await recordEquitySnapshot(ctx.user.id, input as any);
+        await recordEquitySnapshot(1, input as any);
         return { success: true };
       }),
 
     // Record signal performance for adaptive learning
-    recordSignalPerformance: protectedProcedure
+    recordSignalPerformance: publicProcedure
       .input(z.object({
         signalType: z.enum(["CROSSOVER_BUY", "CROSSOVER_SELL", "RSI_PULLBACK_BUY", "RSI_PULLBACK_SELL"]),
         outcome: z.enum(["WIN", "LOSS"]),
@@ -130,48 +130,48 @@ export const appRouter = router({
         recordedAt: z.date(),
       }))
       .mutation(async ({ ctx, input }) => {
-        await recordSignalPerformance(ctx.user.id, input as any);
+        await recordSignalPerformance(1, input as any);
         
         // Update adaptive thresholds after recording
-        await updateAdaptiveThresholds(ctx.user.id, input.signalType);
+        await updateAdaptiveThresholds(1, input.signalType);
         
         return { success: true };
       }),
 
     // Get user's trade history
-    getTrades: protectedProcedure
+    getTrades: publicProcedure
       .input(z.object({
         startDate: z.date().optional(),
         endDate: z.date().optional(),
       }))
       .query(async ({ ctx, input }) => {
-        return await getUserTrades(ctx.user.id, input.startDate, input.endDate);
+        return await getUserTrades(1, input.startDate, input.endDate);
       }),
 
     // Get equity curve data
-    getEquityCurve: protectedProcedure
+    getEquityCurve: publicProcedure
       .input(z.object({
         limit: z.number().default(500),
       }))
       .query(async ({ ctx, input }) => {
-        return await getEquityCurve(ctx.user.id, input.limit);
+        return await getEquityCurve(1, input.limit);
       }),
 
     // Get performance analytics
-    getAnalytics: protectedProcedure.query(async ({ ctx }) => {
-      return await calculateAnalytics(ctx.user.id);
+    getAnalytics: publicProcedure.query(async ({ ctx }) => {
+      return await calculateAnalytics(1);
     }),
   }),
 
   // Session configuration
   sessions: router({
     // Get session config
-    getConfig: protectedProcedure.query(async ({ ctx }) => {
-      return await getSessionConfig(ctx.user.id);
+    getConfig: publicProcedure.query(async ({ ctx }) => {
+      return await getSessionConfig(1);
     }),
 
     // Update session config
-    updateConfig: protectedProcedure
+    updateConfig: publicProcedure
       .input(z.object({
         sessionName: z.string(),
         enabled: z.boolean().optional(),
@@ -182,49 +182,49 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const { sessionName, ...updates } = input;
-        await updateSessionConfig(ctx.user.id, sessionName, updates as any);
+        await updateSessionConfig(1, sessionName, updates as any);
         return { success: true };
       }),
 
     // Check if currently in active session
-    isActive: protectedProcedure.query(async ({ ctx }) => {
-      return await isInActiveSession(ctx.user.id);
+    isActive: publicProcedure.query(async ({ ctx }) => {
+      return await isInActiveSession(1);
     }),
   }),
 
   // Daily loss guard
   dailyLossGuard: router({
     // Get or create daily loss guard
-    getGuard: protectedProcedure
+    getGuard: publicProcedure
       .input(z.object({
         maxDrawdownPercent: z.number(),
       }))
       .query(async ({ ctx, input }) => {
-        return await getDailyLossGuard(ctx.user.id, input.maxDrawdownPercent);
+        return await getDailyLossGuard(1, input.maxDrawdownPercent);
       }),
 
     // Update daily loss guard
-    updateGuard: protectedProcedure
+    updateGuard: publicProcedure
       .input(z.object({
         currentNav: z.number(),
         peakNav: z.number(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return await updateDailyLossGuard(ctx.user.id, input.currentNav, input.peakNav);
+        return await updateDailyLossGuard(1, input.currentNav, input.peakNav);
       }),
   }),
 
   // Adaptive thresholds
   adaptiveThresholds: router({
-    getThresholds: protectedProcedure
+    getThresholds: publicProcedure
       .input(z.object({ signalType: z.string() }))
       .query(async ({ ctx, input }) => {
-        return await getAdaptiveThresholds(ctx.user.id, input.signalType);
+        return await getAdaptiveThresholds(1, input.signalType);
       }),
-    updateThresholds: protectedProcedure
+    updateThresholds: publicProcedure
       .input(z.object({ signalType: z.string() }))
       .mutation(async ({ ctx, input }) => {
-        await updateAdaptiveThresholds(ctx.user.id, input.signalType);
+        await updateAdaptiveThresholds(1, input.signalType);
         return { success: true };
       }),
   }),
@@ -232,7 +232,7 @@ export const appRouter = router({
   // ── Autonomous Engine ──────────────────────────────────────────────────────
   bot: router({
     // Validate OANDA credentials server-side (avoids browser CORS issues)
-    validateCredentials: protectedProcedure
+    validateCredentials: publicProcedure
       .input(z.object({
         token: z.string(),
         accountId: z.string(),
@@ -290,7 +290,7 @@ export const appRouter = router({
         }
       }),
     // Connect and start the engine
-    connect: protectedProcedure
+    connect: publicProcedure
       .input(z.object({
         token: z.string(),
         accountId: z.string(),
@@ -303,17 +303,17 @@ export const appRouter = router({
       }),
 
     // Get full engine state (polls every 3s on frontend)
-    getState: protectedProcedure.query(() => {
+    getState: publicProcedure.query(() => {
       return autonomousEngine.getState();
     }),
 
     // Pause / resume / stop
-    pause: protectedProcedure.mutation(() => { autonomousEngine.pause(); return { success: true }; }),
-    resume: protectedProcedure.mutation(() => { autonomousEngine.resume(); return { success: true }; }),
-    stop: protectedProcedure.mutation(() => { autonomousEngine.stop(); return { success: true }; }),
+    pause: publicProcedure.mutation(() => { autonomousEngine.pause(); return { success: true }; }),
+    resume: publicProcedure.mutation(() => { autonomousEngine.resume(); return { success: true }; }),
+    stop: publicProcedure.mutation(() => { autonomousEngine.stop(); return { success: true }; }),
 
     // Update config
-    updateConfig: protectedProcedure
+    updateConfig: publicProcedure
       .input(z.object({
         riskPercent: z.number().optional(),
         maxConcurrentTrades: z.number().optional(),
@@ -329,7 +329,7 @@ export const appRouter = router({
       }),
 
     // Close a specific trade
-    closeTrade: protectedProcedure
+    closeTrade: publicProcedure
       .input(z.object({ tradeId: z.string() }))
       .mutation(async ({ input }) => {
         if (!autonomousEngine.api) throw new Error("Engine not connected");
@@ -338,12 +338,12 @@ export const appRouter = router({
       }),
 
     // Get closed trade history
-    getHistory: protectedProcedure.query(() => {
+    getHistory: publicProcedure.query(() => {
       return autonomousEngine.getState().tradeHistory;
     }),
 
     // Get live prices for open positions
-    getLivePrices: protectedProcedure
+    getLivePrices: publicProcedure
       .input(z.object({ instruments: z.array(z.string()) }))
       .query(async ({ input }) => {
         if (!autonomousEngine.api || input.instruments.length === 0) return {};
@@ -360,7 +360,7 @@ export const appRouter = router({
       }),
 
     // Get candles for chart
-    getCandles: protectedProcedure
+    getCandles: publicProcedure
       .input(z.object({
         instrument: z.string(),
         granularity: z.string(),
@@ -372,12 +372,12 @@ export const appRouter = router({
       }),
 
     // Get learning engine state
-    getLearning: protectedProcedure.query(() => {
+    getLearning: publicProcedure.query(() => {
       return learningEngine.getState();
     }),
 
     // Get learning insights (human-readable)
-    getLearningInsights: protectedProcedure.query(() => {
+    getLearningInsights: publicProcedure.query(() => {
       const state = learningEngine.getState();
       return {
         insights: state.insights ?? [],
@@ -389,7 +389,7 @@ export const appRouter = router({
     }),
 
     // Get funded account readiness
-    getFundedReadiness: protectedProcedure.query(() => {
+    getFundedReadiness: publicProcedure.query(() => {
       const s = autonomousEngine.getState();
       const totalTrades = s.totalTrades;
       const wins = s.totalWins;
@@ -422,7 +422,7 @@ export const appRouter = router({
     }),
 
     // ── Backtest ──────────────────────────────────────────────────────────────
-    runBacktest: protectedProcedure
+    runBacktest: publicProcedure
       .input(z.object({
         instrument: z.string(),
         granularity: z.string().default("M15"),
@@ -446,7 +446,7 @@ export const appRouter = router({
       }),
 
     // ── Prop Firm Mode ────────────────────────────────────────────────────────
-    setPropFirmMode: protectedProcedure
+    setPropFirmMode: publicProcedure
       .input(z.object({
         enabled: z.boolean(),
         maxDailyLossPct: z.number().default(5),
@@ -465,7 +465,7 @@ export const appRouter = router({
       }),
 
     // ── Telegram Config ───────────────────────────────────────────────────────
-    setTelegramConfig: protectedProcedure
+    setTelegramConfig: publicProcedure
       .input(z.object({
         token: z.string(),
         chatId: z.string(),
@@ -475,7 +475,7 @@ export const appRouter = router({
         return { success: true, config: getTelegramConfig() };
       }),
 
-    getTelegramConfig: protectedProcedure.query(() => {
+    getTelegramConfig: publicProcedure.query(() => {
       return getTelegramConfig();
     }),
   }),
