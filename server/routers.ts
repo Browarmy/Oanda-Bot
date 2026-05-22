@@ -231,6 +231,64 @@ export const appRouter = router({
 
   // ── Autonomous Engine ──────────────────────────────────────────────────────
   bot: router({
+    // Validate OANDA credentials server-side (avoids browser CORS issues)
+    validateCredentials: protectedProcedure
+      .input(z.object({
+        token: z.string(),
+        accountId: z.string(),
+        environment: z.enum(["practice", "live"]),
+      }))
+      .mutation(async ({ input }) => {
+        const practiceUrl = "https://api-fxpractice.oanda.com";
+        const liveUrl = "https://api-fxtrade.oanda.com";
+        const selectedUrl = input.environment === "live" ? liveUrl : practiceUrl;
+        // Step 1: test token validity by listing all accounts (no account ID needed)
+        try {
+          const listRes = await fetch(`${selectedUrl}/v3/accounts`, {
+            headers: { Authorization: `Bearer ${input.token}` },
+          });
+          if (!listRes.ok) {
+            // Try the OTHER environment automatically
+            const altUrl = input.environment === "live" ? practiceUrl : liveUrl;
+            const altRes = await fetch(`${altUrl}/v3/accounts`, {
+              headers: { Authorization: `Bearer ${input.token}` },
+            });
+            if (altRes.ok) {
+              const altBody = await altRes.json();
+              const altAccounts = (altBody.accounts ?? []).map((a: any) => a.id);
+              const altEnv = input.environment === "live" ? "practice" : "live";
+              return {
+                valid: false,
+                error: `Token is valid but for ${altEnv.toUpperCase()} not ${input.environment.toUpperCase()}. Your accounts: ${altAccounts.join(", ")}. Switch to ${altEnv.toUpperCase()} on the login screen.`,
+              };
+            }
+            const body = await listRes.json().catch(() => ({}));
+            const msg = (body as any)?.errorMessage ?? `OANDA ${listRes.status}: token rejected`;
+            return { valid: false, error: msg };
+          }
+          // Token is valid — now check the account ID
+          const listBody = await listRes.json();
+          const accounts = (listBody.accounts ?? []).map((a: any) => a.id) as string[];
+          if (accounts.length === 0) {
+            return { valid: false, error: "Token valid but no accounts found. Check your OANDA account." };
+          }
+          // Check if the provided account ID matches any account
+          const matched = accounts.find(id =>
+            id === input.accountId ||
+            id.replace(/-/g, "") === input.accountId.replace(/-/g, "")
+          );
+          if (!matched) {
+            return {
+              valid: false,
+              error: `Account ID not found. Your accounts are: ${accounts.join(", ")}. Please use one of these exactly.`,
+            };
+          }
+          // All good — init engine with matched account ID
+          return { valid: true, resolvedAccountId: matched };
+        } catch (e: any) {
+          return { valid: false, error: e?.message ?? "Network error connecting to OANDA" };
+        }
+      }),
     // Connect and start the engine
     connect: protectedProcedure
       .input(z.object({
