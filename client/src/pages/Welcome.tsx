@@ -1,8 +1,5 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Eye, EyeOff, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 interface WelcomeProps {
@@ -16,16 +13,16 @@ export default function Welcome({ onConnected }: WelcomeProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   const validateMutation = trpc.bot.validateCredentials.useMutation({
     onSuccess: (data) => {
       if (data.valid) {
-        // Use the resolved account ID (with correct dashes) if returned
         const resolvedId = (data as any).resolvedAccountId ?? accountId;
         localStorage.setItem("oanda_credentials", JSON.stringify({ token, accountId: resolvedId }));
         localStorage.setItem("oanda_env", environment);
         setSuccess(true);
-        setTimeout(() => onConnected({ token, accountId: resolvedId }), 800);
+        setTimeout(() => onConnected({ token, accountId: resolvedId }), 900);
       } else {
         setError(data.error ?? "Invalid credentials. Check your token and account ID.");
         setLoading(false);
@@ -49,137 +46,158 @@ export default function Welcome({ onConnected }: WelcomeProps) {
   };
 
   return (
-    <div className="min-h-screen bg-black text-amber-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-slate-900 border-amber-900/30">
-        <div className="p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="text-4xl font-bold text-amber-400 mb-2 font-mono">⚡ OANDA BOT</div>
-            <p className="text-amber-100/70 text-sm font-mono">Real-Time Algorithmic Trading</p>
+    <div className="min-h-screen flex flex-col items-center justify-center p-5 relative overflow-hidden"
+      style={{ background: "linear-gradient(135deg, #050c1a 0%, #0a1628 50%, #0d1f3a 100%)" }}>
+
+      {/* Background glow orbs */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-20%] left-[-10%] w-72 h-72 rounded-full opacity-20"
+          style={{ background: "radial-gradient(circle, #f5a623 0%, transparent 70%)" }} />
+        <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 rounded-full opacity-10"
+          style={{ background: "radial-gradient(circle, #448aff 0%, transparent 70%)" }} />
+      </div>
+
+      <div className="w-full max-w-sm relative z-10">
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-5 shadow-2xl"
+            style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)", boxShadow: "0 0 40px #f5a62340" }}>
+            <span className="text-3xl">⚡</span>
           </div>
+          <h1 className="text-3xl font-black tracking-tight mb-1" style={{ color: "#f5f0e8" }}>OANDA BOT</h1>
+          <p className="text-sm font-medium" style={{ color: "#4a6080" }}>Autonomous Forex Trading</p>
+        </div>
 
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-amber-50 mb-1">Connect Account</h1>
-            <p className="text-amber-100/60 text-sm">Enter your OANDA credentials to start trading</p>
+        {/* Environment selector */}
+        <div className="mb-6">
+          <div className="flex rounded-2xl overflow-hidden p-1"
+            style={{ background: "#0c1525", border: "1px solid #1a2d45" }}>
+            {(["practice", "live"] as const).map((env) => (
+              <button key={env} type="button" onClick={() => setEnvironment(env)}
+                className="flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-200"
+                style={{
+                  background: environment === env
+                    ? env === "live" ? "linear-gradient(135deg, #c0392b, #e74c3c)" : "linear-gradient(135deg, #f5a623, #e8940f)"
+                    : "transparent",
+                  color: environment === env ? (env === "live" ? "#fff" : "#060d18") : "#4a6080",
+                  boxShadow: environment === env ? "0 4px 15px rgba(0,0,0,0.3)" : "none",
+                }}>
+                {env === "live" ? "🔴 LIVE" : "🟡 PRACTICE"}
+              </button>
+            ))}
           </div>
+          {environment === "live" && (
+            <p className="text-xs mt-2 text-center font-medium" style={{ color: "#e74c3c" }}>
+              ⚠ Real money — trade responsibly
+            </p>
+          )}
+        </div>
 
-          <form onSubmit={handleConnect} className="space-y-5">
-            {/* Environment Toggle */}
-            <div>
-              <label className="block text-amber-100/70 text-xs font-mono mb-2 uppercase tracking-widest">
-                Account Type
-              </label>
-              <div className="flex rounded-md overflow-hidden border border-amber-900/40">
-                <button
-                  type="button"
-                  onClick={() => setEnvironment("practice")}
-                  className={`flex-1 py-2.5 text-sm font-mono font-bold transition-colors ${
-                    environment === "practice"
-                      ? "bg-amber-600 text-black"
-                      : "bg-slate-800 text-amber-100/50 hover:bg-slate-700"
-                  }`}
-                >
-                  PRACTICE
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEnvironment("live")}
-                  className={`flex-1 py-2.5 text-sm font-mono font-bold transition-colors ${
-                    environment === "live"
-                      ? "bg-red-600 text-white"
-                      : "bg-slate-800 text-amber-100/50 hover:bg-slate-700"
-                  }`}
-                >
-                  LIVE
-                </button>
-              </div>
-              {environment === "live" && (
-                <p className="text-red-400 text-xs mt-1.5 font-mono">
-                  ⚠️ Live trading uses real money. Ensure you understand the risks.
-                </p>
-              )}
-            </div>
+        {/* Form card */}
+        <div className="rounded-3xl p-6 mb-4"
+          style={{ background: "rgba(12, 21, 37, 0.8)", border: "1px solid #1a2d45", backdropFilter: "blur(20px)" }}>
 
-            {/* Token Input */}
+          <form onSubmit={handleConnect} className="space-y-4">
+            {/* Token input */}
             <div>
-              <label className="block text-amber-100/70 text-xs font-mono mb-2 uppercase tracking-widest">
+              <label className="block text-xs font-bold mb-2 tracking-widest uppercase" style={{ color: "#4a6080" }}>
                 API Token
               </label>
-              <Input
-                type="password"
-                placeholder="Enter your OANDA API token"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                disabled={loading || success}
-                className="bg-slate-800 border-amber-900/30 text-amber-50 placeholder-amber-900/50 font-mono text-sm"
-              />
-              <p className="text-amber-900/50 text-xs mt-1 font-mono">
-                OANDA → My Account → Manage API Access → Generate Token
+              <div className="relative">
+                <input
+                  type={showToken ? "text" : "password"}
+                  placeholder="Paste your OANDA API token"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  disabled={loading || success}
+                  className="w-full rounded-xl px-4 py-3.5 pr-12 text-sm font-mono outline-none transition-all"
+                  style={{
+                    background: "#060d18",
+                    border: `1px solid ${token ? "#f5a62344" : "#1a2d45"}`,
+                    color: "#f5f0e8",
+                    fontSize: 13,
+                  }}
+                />
+                <button type="button" onClick={() => setShowToken(!showToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                  style={{ color: "#4a6080" }}>
+                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs mt-1.5" style={{ color: "#2a4060" }}>
+                hub.oanda.com → Tools → API → Generate
               </p>
             </div>
 
-            {/* Account ID Input */}
+            {/* Account ID input */}
             <div>
-              <label className="block text-amber-100/70 text-xs font-mono mb-2 uppercase tracking-widest">
+              <label className="block text-xs font-bold mb-2 tracking-widest uppercase" style={{ color: "#4a6080" }}>
                 Account ID
               </label>
-              <Input
+              <input
                 type="text"
-                placeholder="e.g., 101-004-12345678-001"
+                placeholder="e.g. 101-004-12345678-001"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
                 disabled={loading || success}
-                className="bg-slate-800 border-amber-900/30 text-amber-50 placeholder-amber-900/50 font-mono text-sm"
+                className="w-full rounded-xl px-4 py-3.5 text-sm font-mono outline-none transition-all"
+                style={{
+                  background: "#060d18",
+                  border: `1px solid ${accountId ? "#f5a62344" : "#1a2d45"}`,
+                  color: "#f5f0e8",
+                  fontSize: 13,
+                }}
               />
-              <p className="text-amber-900/50 text-xs mt-1 font-mono">
-                OANDA dashboard → account selector (include dashes)
+              <p className="text-xs mt-1.5" style={{ color: "#2a4060" }}>
+                HUB → Accounts → v20 Account Number
               </p>
             </div>
 
             {/* Error */}
             {error && (
-              <div className="flex items-start gap-3 p-3 bg-red-950/30 border border-red-900/50 rounded">
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                <p className="text-red-200 text-sm font-mono">{error}</p>
+              <div className="flex items-start gap-3 rounded-xl p-3"
+                style={{ background: "#2d0a0a", border: "1px solid #c0392b44" }}>
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#e74c3c" }} />
+                <p className="text-xs font-mono leading-relaxed" style={{ color: "#ff8a80" }}>{error}</p>
               </div>
             )}
 
             {/* Success */}
             {success && (
-              <div className="flex items-start gap-3 p-3 bg-green-950/30 border border-green-900/50 rounded">
-                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                <p className="text-green-200 text-sm font-mono">Connected! Loading dashboard...</p>
+              <div className="flex items-center gap-3 rounded-xl p-3"
+                style={{ background: "#0a2d1a", border: "1px solid #00e67644" }}>
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#00e676" }} />
+                <p className="text-xs font-mono" style={{ color: "#69f0ae" }}>Connected! Loading dashboard...</p>
               </div>
             )}
 
-            {/* Submit */}
-            <Button
+            {/* Submit button */}
+            <button
               type="submit"
               disabled={loading || success || !token.trim() || !accountId.trim()}
-              className="w-full bg-amber-600 hover:bg-amber-700 text-black font-bold font-mono py-2 h-11"
-            >
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-black text-sm tracking-wide transition-all duration-200 active:scale-95 disabled:opacity-40"
+              style={{
+                background: success ? "linear-gradient(135deg, #00c853, #00e676)"
+                  : "linear-gradient(135deg, #f5a623, #e8940f)",
+                color: "#060d18",
+                boxShadow: "0 8px 30px rgba(245, 166, 35, 0.3)",
+              }}>
               {loading ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verifying...</>
+                <><Loader2 className="w-4 h-4 animate-spin" />Verifying...</>
               ) : success ? (
-                <><CheckCircle2 className="w-4 h-4 mr-2" />Connected</>
+                <><CheckCircle2 className="w-4 h-4" />Connected</>
               ) : (
-                `Connect ${environment === "live" ? "Live" : "Practice"} Account`
+                <>Connect {environment === "live" ? "Live" : "Practice"} Account <ChevronRight className="w-4 h-4" /></>
               )}
-            </Button>
+            </button>
           </form>
-
-          <div className="mt-6 pt-5 border-t border-amber-900/30">
-            <p className="text-amber-900/60 text-xs font-mono text-center mb-2">
-              🔒 Credentials stored locally on this device only
-            </p>
-            <div className="space-y-1 text-amber-900/50 text-xs font-mono">
-              <p>• Never share your API token</p>
-              <p>• Use practice account for testing</p>
-              <p>• Validation runs server-side — no CORS issues</p>
-            </div>
-          </div>
         </div>
-      </Card>
+
+        {/* Footer note */}
+        <p className="text-center text-xs" style={{ color: "#2a4060" }}>
+          🔒 Credentials stored locally on this device only
+        </p>
+      </div>
     </div>
   );
 }

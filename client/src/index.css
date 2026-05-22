@@ -175,3 +175,14 @@
     }
   }
 }
+/* iPhone safe area support */
+html, body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Status dot pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px currentColor; }
+  50% { opacity: 0.5; box-shadow: 0 0 12px currentColor; }
+}

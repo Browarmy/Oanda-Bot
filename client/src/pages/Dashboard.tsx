@@ -1,8 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, ReferenceLine,
@@ -10,7 +7,8 @@ import {
 import {
   TrendingUp, TrendingDown, Zap, Pause, Play, LogOut,
   Settings, Activity, Target, CheckCircle2, XCircle,
-  Brain, FlaskConical, Shield, Bell, RefreshCw,
+  Brain, FlaskConical, Shield, Bell, RefreshCw, ChevronRight,
+  AlertCircle, BarChart2,
 } from "lucide-react";
 
 interface DashboardProps {
@@ -19,19 +17,33 @@ interface DashboardProps {
 }
 
 const C = {
-  bg: "#060d18", s1: "#0c1525", s2: "#111d2e",
-  border: "#1a2d45", amber: "#f5a623", green: "#00e676",
-  red: "#ff3d00", blue: "#448aff", text: "#d8d3ca",
-  muted: "#4a6080",
+  bg: "#050c1a",
+  s1: "rgba(12, 21, 37, 0.85)",
+  s2: "rgba(6, 13, 24, 0.9)",
+  border: "#1a2d45",
+  amber: "#f5a623",
+  green: "#00e676",
+  red: "#ff4444",
+  blue: "#448aff",
+  text: "#f0ebe0",
+  muted: "#3a5570",
+  mutedLight: "#6a8aaa",
 };
 
-function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+function StatPill({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: "14px 16px" }}>
-      <p style={{ fontSize: 10, color: C.muted, fontFamily: "monospace", letterSpacing: 1, marginBottom: 4 }}>{label}</p>
-      <p style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: color ?? C.amber }}>{value}</p>
-      {sub && <p style={{ fontSize: 10, fontFamily: "monospace", color: C.muted, marginTop: 2 }}>{sub}</p>}
-    </Card>
+    <div className="rounded-2xl p-4 flex flex-col gap-1"
+      style={{ background: C.s1, border: `1px solid ${C.border}`, backdropFilter: "blur(12px)" }}>
+      <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>{label}</p>
+      <p className="text-xl font-black font-mono leading-none" style={{ color: color ?? C.amber }}>{value}</p>
+      {sub && <p className="text-xs font-mono" style={{ color: C.muted }}>{sub}</p>}
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-black tracking-widest uppercase mb-3" style={{ color: C.amber }}>{children}</p>
   );
 }
 
@@ -47,7 +59,6 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [connectError, setConnectError] = useState("");
 
-  // ── tRPC mutations ────────────────────────────────────────────────────────
   const connectMutation = trpc.bot.connect.useMutation({
     onSuccess: () => setIsConnected(true),
     onError: (e) => setConnectError(e.message),
@@ -62,8 +73,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   });
   const backtestMutation = trpc.bot.runBacktest.useMutation();
 
-  // ── tRPC queries ──────────────────────────────────────────────────────────
-  const { data: state, refetch: refetchState } = trpc.bot.getState.useQuery(undefined, {
+  const { data: state } = trpc.bot.getState.useQuery(undefined, {
     enabled: isConnected,
     refetchInterval: 3000,
   });
@@ -83,7 +93,6 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     enabled: isConnected,
   });
 
-  // Live prices for open positions
   const openInstruments = useMemo(
     () => Array.from(new Set((state?.openTrades ?? []).map((t: any) => t.instrument as string))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,7 +103,6 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     { enabled: isConnected && openInstruments.length > 0, refetchInterval: 2000, staleTime: 0 }
   );
 
-  // Auto-connect on mount
   useEffect(() => {
     const env = (localStorage.getItem("oanda_env") ?? "practice") as "practice" | "live";
     connectMutation.mutate({
@@ -105,7 +113,6 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Derived values
   const s = state;
   const balance = s?.accountBalance ?? 0;
   const equity = s?.accountEquity ?? 0;
@@ -121,171 +128,228 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const logs = s?.logs ?? [];
   const portfolioHeat = (s as any)?.portfolioHeat ?? 0;
   const regimes = (s as any)?.regimes ?? {};
+  const env = localStorage.getItem("oanda_env") ?? "practice";
 
-  const tabs = [
-    { id: "overview", label: "Overview", icon: <Activity className="w-3 h-3" /> },
-    { id: "positions", label: `Positions${openTrades.length > 0 ? ` (${openTrades.length})` : ""}`, icon: <TrendingUp className="w-3 h-3" /> },
-    { id: "history", label: `History${history && history.length > 0 ? ` (${history.length})` : ""}`, icon: <Target className="w-3 h-3" /> },
-    { id: "backtest", label: "Backtest", icon: <FlaskConical className="w-3 h-3" /> },
-    { id: "ai", label: "🧠 AI", icon: <Brain className="w-3 h-3" /> },
-    { id: "settings", label: "Settings", icon: <Settings className="w-3 h-3" /> },
+  const navItems = [
+    { id: "overview", label: "Overview", icon: <Activity className="w-5 h-5" /> },
+    { id: "positions", label: "Trades", icon: <TrendingUp className="w-5 h-5" />, badge: openTrades.length > 0 ? openTrades.length : undefined },
+    { id: "history", label: "History", icon: <BarChart2 className="w-5 h-5" /> },
+    { id: "ai", label: "AI", icon: <Brain className="w-5 h-5" /> },
+    { id: "settings", label: "Settings", icon: <Settings className="w-5 h-5" /> },
   ];
 
+  // ── Loading screen ──────────────────────────────────────────────────────────
   if (!isConnected && connectMutation.isPending) {
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center", color: C.amber, fontFamily: "monospace" }}>
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <p>Connecting to OANDA...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4"
+        style={{ background: C.bg }}>
+        <div className="w-16 h-16 rounded-3xl flex items-center justify-center"
+          style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)", boxShadow: "0 0 40px #f5a62340" }}>
+          <Zap className="w-8 h-8" style={{ color: C.bg }} />
         </div>
+        <RefreshCw className="w-6 h-6 animate-spin" style={{ color: C.amber }} />
+        <p className="text-sm font-mono font-bold" style={{ color: C.mutedLight }}>Connecting to OANDA...</p>
       </div>
     );
   }
 
+  // ── Error screen ────────────────────────────────────────────────────────────
   if (!isConnected && connectError) {
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center", color: C.red, fontFamily: "monospace", maxWidth: 400 }}>
-          <XCircle className="w-8 h-8 mx-auto mb-4" />
-          <p style={{ marginBottom: 16 }}>Connection failed: {connectError}</p>
-          <Button onClick={onLogout} style={{ background: C.amber, color: C.bg, fontFamily: "monospace" }}>
-            Re-enter credentials
-          </Button>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6"
+        style={{ background: C.bg }}>
+        <div className="w-16 h-16 rounded-3xl flex items-center justify-center"
+          style={{ background: "#2d0a0a", border: "1px solid #c0392b44" }}>
+          <XCircle className="w-8 h-8" style={{ color: C.red }} />
         </div>
+        <div className="text-center">
+          <p className="text-base font-bold mb-2" style={{ color: C.text }}>Connection Failed</p>
+          <p className="text-sm font-mono" style={{ color: C.mutedLight }}>{connectError}</p>
+        </div>
+        <button onClick={onLogout}
+          className="px-8 py-4 rounded-2xl font-black text-sm tracking-wide active:scale-95 transition-transform"
+          style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)", color: C.bg }}>
+          Re-enter Credentials
+        </button>
       </div>
     );
   }
 
+  // ── Main dashboard ──────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "monospace" }}>
-      {/* ── Header ── */}
-      <div style={{ background: C.s1, borderBottom: `1px solid ${C.border}`, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Zap style={{ color: C.amber, width: 20, height: 20 }} />
+    <div className="min-h-screen flex flex-col" style={{ background: C.bg, color: C.text }}>
+
+      {/* ── Sticky header ── */}
+      <div className="sticky top-0 z-50 flex items-center justify-between px-5 py-3"
+        style={{ background: "rgba(5, 12, 26, 0.95)", borderBottom: `1px solid ${C.border}`, backdropFilter: "blur(20px)" }}>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)" }}>
+            <Zap className="w-5 h-5" style={{ color: C.bg }} />
+          </div>
           <div>
-            <p style={{ fontSize: 14, fontWeight: 700, color: C.amber, letterSpacing: 2 }}>OANDA BOT v8</p>
-            <p style={{ fontSize: 10, color: C.muted }}>
-              {credentials.accountId} · {(localStorage.getItem("oanda_env") ?? "practice").toUpperCase()}
+            <p className="text-sm font-black tracking-wide" style={{ color: C.amber }}>OANDA BOT</p>
+            <p className="text-xs font-mono" style={{ color: C.muted }}>
+              {credentials.accountId.slice(-8)} · {env.toUpperCase()}
             </p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 20,
-            background: isLive && !isPaused ? "#004d2922" : "#4d110022",
-            color: isLive && !isPaused ? C.green : isPaused ? C.amber : C.red,
-            border: `1px solid ${isLive && !isPaused ? C.green : isPaused ? C.amber : C.red}44`,
-          }}>
-            {isLive && !isPaused ? "● LIVE" : isPaused ? "⏸ PAUSED" : "■ STOPPED"}
-          </span>
-          {isLive && !isPaused
-            ? <Button size="sm" onClick={() => pauseMutation.mutate()} style={{ background: C.amber, color: C.bg, fontSize: 10 }}><Pause className="w-3 h-3 mr-1" />PAUSE</Button>
-            : isPaused
-            ? <Button size="sm" onClick={() => resumeMutation.mutate()} style={{ background: C.green, color: C.bg, fontSize: 10 }}><Play className="w-3 h-3 mr-1" />RESUME</Button>
-            : null}
-          <Button size="sm" onClick={onLogout} style={{ background: C.s2, border: `1px solid ${C.border}`, color: C.text, fontSize: 10 }}>
-            <LogOut className="w-3 h-3" />
-          </Button>
+
+        <div className="flex items-center gap-2">
+          {/* Status pill */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{
+              background: isLive && !isPaused ? "#00e67615" : isPaused ? "#f5a62315" : "#ff444415",
+              border: `1px solid ${isLive && !isPaused ? C.green : isPaused ? C.amber : C.red}44`,
+            }}>
+            <div className="w-1.5 h-1.5 rounded-full"
+              style={{
+                background: isLive && !isPaused ? C.green : isPaused ? C.amber : C.red,
+                boxShadow: `0 0 6px ${isLive && !isPaused ? C.green : isPaused ? C.amber : C.red}`,
+                animation: isLive && !isPaused ? "pulse 2s infinite" : "none",
+              }} />
+            <span className="text-xs font-black"
+              style={{ color: isLive && !isPaused ? C.green : isPaused ? C.amber : C.red }}>
+              {isLive && !isPaused ? "LIVE" : isPaused ? "PAUSED" : "STOPPED"}
+            </span>
+          </div>
+
+          {/* Pause/Resume */}
+          {isLive && !isPaused ? (
+            <button onClick={() => pauseMutation.mutate()}
+              className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-90 transition-transform"
+              style={{ background: "#f5a62320", border: `1px solid ${C.amber}44` }}>
+              <Pause className="w-4 h-4" style={{ color: C.amber }} />
+            </button>
+          ) : isPaused ? (
+            <button onClick={() => resumeMutation.mutate()}
+              className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-90 transition-transform"
+              style={{ background: "#00e67620", border: `1px solid ${C.green}44` }}>
+              <Play className="w-4 h-4" style={{ color: C.green }} />
+            </button>
+          ) : null}
+
+          {/* Logout */}
+          <button onClick={onLogout}
+            className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-90 transition-transform"
+            style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+            <LogOut className="w-4 h-4" style={{ color: C.mutedLight }} />
+          </button>
         </div>
       </div>
 
-      {/* ── Stats bar ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, padding: "16px 20px 0" }}>
-        <StatCard label="BALANCE" value={`${currency} ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-        <StatCard label="EQUITY" value={`${currency} ${equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          sub={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)} total`}
-          color={equity >= balance ? C.green : C.red} />
-        <StatCard label="WIN RATE" value={`${winRate}%`} color={winRate >= 55 ? C.green : winRate >= 40 ? C.amber : C.red}
-          sub={`${s?.totalWins ?? 0}W / ${s?.totalLosses ?? 0}L · ${totalTrades} trades`} />
-        <StatCard label="PROFIT FACTOR" value={pf.toString()} color={parseFloat(pf) >= 1.5 ? C.green : parseFloat(pf) >= 1 ? C.amber : C.red}
-          sub={`Portfolio heat: ${(portfolioHeat * 100).toFixed(1)}%`} />
-      </div>
-
-      {/* ── Tab bar ── */}
-      <div style={{ display: "flex", gap: 4, padding: "12px 20px 0", borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
-            background: tab === t.id ? C.amber : "transparent",
-            color: tab === t.id ? C.bg : C.muted,
-            border: `1px solid ${tab === t.id ? C.amber : C.border}`,
-            borderBottom: "none", borderRadius: "6px 6px 0 0",
-            fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: "pointer", whiteSpace: "nowrap",
-          }}>
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Tab content ── */}
-      <div style={{ padding: "20px" }}>
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto pb-24 px-4 pt-4 space-y-4">
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {/* Equity curve */}
-            <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16, gridColumn: "1 / -1" }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>EQUITY CURVE</p>
-              <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={equityCurve}>
-                  <defs>
-                    <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={C.green} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={C.green} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                  <XAxis dataKey="time" tick={{ fontSize: 9, fill: C.muted }} />
-                  <YAxis tick={{ fontSize: 9, fill: C.muted }} domain={["auto", "auto"]} />
-                  <Tooltip contentStyle={{ background: C.s2, border: `1px solid ${C.border}`, fontSize: 10, fontFamily: "monospace" }} />
-                  <Area type="monotone" dataKey="equity" stroke={C.green} strokeWidth={2} fill="url(#eqGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
+          <>
+            {/* Balance / Equity hero */}
+            <div className="rounded-3xl p-5 relative overflow-hidden"
+              style={{ background: "linear-gradient(135deg, #0c1a2e, #0f2040)", border: `1px solid ${C.border}` }}>
+              <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
+                style={{ background: "radial-gradient(circle, #f5a623, transparent)", transform: "translate(30%, -30%)" }} />
+              <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: C.muted }}>Account Balance</p>
+              <p className="text-4xl font-black font-mono mb-1" style={{ color: C.text }}>
+                {currency} {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-mono font-bold" style={{ color: equity >= balance ? C.green : C.red }}>
+                  {equity >= balance ? "▲" : "▼"} {Math.abs(equity - balance).toFixed(2)} unrealised
+                </span>
+                <span className="text-xs font-mono" style={{ color: C.muted }}>
+                  · {totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(2)} total P&L
+                </span>
+              </div>
+            </div>
 
-            {/* Regime map */}
-            <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>MARKET REGIMES</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <StatPill label="Win Rate" value={`${winRate}%`}
+                color={winRate >= 55 ? C.green : winRate >= 40 ? C.amber : C.red}
+                sub={`${s?.totalWins ?? 0}W / ${s?.totalLosses ?? 0}L`} />
+              <StatPill label="Profit Factor" value={pf.toString()}
+                color={parseFloat(pf) >= 1.5 ? C.green : parseFloat(pf) >= 1 ? C.amber : C.red}
+                sub={`${totalTrades} trades`} />
+              <StatPill label="Open Trades" value={String(openTrades.length)}
+                color={openTrades.length > 0 ? C.blue : C.muted}
+                sub={`Heat: ${(portfolioHeat * 100).toFixed(1)}%`} />
+              <StatPill label="Equity" value={`${currency} ${equity.toFixed(0)}`}
+                color={equity >= balance ? C.green : C.red}
+                sub={equity >= balance ? "Profitable" : "In drawdown"} />
+            </div>
+
+            {/* Equity curve */}
+            {equityCurve.length > 1 && (
+              <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <SectionTitle>Equity Curve</SectionTitle>
+                <ResponsiveContainer width="100%" height={160}>
+                  <AreaChart data={equityCurve}>
+                    <defs>
+                      <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={C.green} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={C.green} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="time" tick={{ fontSize: 9, fill: C.muted }} />
+                    <YAxis tick={{ fontSize: 9, fill: C.muted }} domain={["auto", "auto"]} />
+                    <Tooltip contentStyle={{ background: "#0c1525", border: `1px solid ${C.border}`, fontSize: 10, fontFamily: "monospace", borderRadius: 12 }} />
+                    <Area type="monotone" dataKey="equity" stroke={C.green} strokeWidth={2} fill="url(#eqGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Market Regimes */}
+            <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <SectionTitle>Market Regimes</SectionTitle>
+              <div className="space-y-2">
                 {Object.entries(regimes).slice(0, 8).map(([pair, regime]: [string, any]) => (
-                  <div key={pair} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 10, color: C.text }}>{pair.replace("_", "/")}</span>
-                    <span style={{
-                      fontSize: 9, padding: "2px 8px", borderRadius: 10, fontWeight: 700,
-                      background: regime === "TRENDING" ? "#004d2922" : regime === "RANGING" ? "#1a2d4522" : "#4d110022",
-                      color: regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber,
-                      border: `1px solid ${regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber}44`,
-                    }}>{regime}</span>
+                  <div key={pair} className="flex items-center justify-between py-2 px-3 rounded-xl"
+                    style={{ background: C.s2 }}>
+                    <span className="text-sm font-mono font-bold" style={{ color: C.text }}>{pair.replace("_", "/")}</span>
+                    <span className="text-xs font-black px-3 py-1 rounded-full"
+                      style={{
+                        background: regime === "TRENDING" ? "#00e67615" : regime === "RANGING" ? "#448aff15" : "#f5a62315",
+                        color: regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber,
+                        border: `1px solid ${regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber}44`,
+                      }}>{regime}</span>
                   </div>
                 ))}
-                {Object.keys(regimes).length === 0 && <p style={{ fontSize: 10, color: C.muted }}>Scanning pairs...</p>}
+                {Object.keys(regimes).length === 0 && (
+                  <p className="text-sm text-center py-4" style={{ color: C.muted }}>Scanning pairs...</p>
+                )}
               </div>
-            </Card>
+            </div>
 
             {/* Activity log */}
-            <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>ACTIVITY LOG</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto" }}>
-                {logs.slice(0, 20).map((log: any, i: number) => (
-                  <p key={i} style={{ fontSize: 9, color: log.includes("✅") || log.includes("🏆") ? C.green : log.includes("💔") || log.includes("🛑") ? C.red : C.muted, lineHeight: 1.4 }}>
+            <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <SectionTitle>Activity Log</SectionTitle>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {logs.slice(0, 30).map((log: any, i: number) => (
+                  <p key={i} className="text-xs font-mono leading-relaxed"
+                    style={{ color: log.includes("✅") || log.includes("🏆") ? C.green : log.includes("💔") || log.includes("🛑") ? C.red : C.mutedLight }}>
                     {log}
                   </p>
                 ))}
-                {logs.length === 0 && <p style={{ fontSize: 10, color: C.muted }}>Waiting for activity...</p>}
+                {logs.length === 0 && <p className="text-sm text-center py-4" style={{ color: C.muted }}>Waiting for activity...</p>}
               </div>
-            </Card>
-          </div>
+            </div>
+          </>
         )}
 
         {/* ── POSITIONS ── */}
         {tab === "positions" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {openTrades.length === 0 && (
-              <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 24, textAlign: "center" }}>
-                <p style={{ color: C.muted, fontSize: 12 }}>No open positions</p>
-              </Card>
-            )}
-            {openTrades.map((trade: any) => {
+          <div className="space-y-3">
+            {openTrades.length === 0 ? (
+              <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
+                style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
+                <p className="text-sm font-bold" style={{ color: C.muted }}>No open positions</p>
+                <p className="text-xs text-center" style={{ color: C.muted }}>The bot is scanning for opportunities</p>
+              </div>
+            ) : openTrades.map((trade: any) => {
               const lp = (livePrices as any)?.[trade.instrument];
               const currentPrice = lp?.mid ?? trade.entryPrice;
               const isJpy = trade.instrument.includes("JPY");
@@ -293,75 +357,74 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
               const rawDiff = trade.direction === "BUY" ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
               const livePips = rawDiff * pipFactor;
               const isProfit = livePips >= 0;
-              const slDist = Math.abs(trade.entryPrice - trade.stopLoss);
               const tpDist = Math.abs(trade.takeProfit - trade.entryPrice);
-              const progress = slDist + tpDist > 0 ? Math.max(0, Math.min(100, (rawDiff / tpDist) * 100)) : 0;
+              const progress = tpDist > 0 ? Math.max(0, Math.min(100, (rawDiff / tpDist) * 100)) : 0;
               const dp = isJpy ? 3 : 5;
               const durationMs = Date.now() - trade.openTime;
               const durationMin = Math.floor(durationMs / 60000);
               const durationStr = durationMin < 60 ? `${durationMin}m` : `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`;
 
               return (
-                <Card key={trade.id} style={{
-                  background: C.s1,
-                  border: `2px solid ${isProfit ? C.green + "44" : C.red + "44"}`,
-                  padding: 16,
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 12,
-                        background: trade.direction === "BUY" ? "#004d2922" : "#4d110022",
-                        color: trade.direction === "BUY" ? C.green : C.red,
-                        border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}44`,
-                      }}>{trade.direction}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{trade.instrument.replace("_", "/")}</span>
-                      <span style={{ fontSize: 9, color: C.muted }}>{durationStr}</span>
+                <div key={trade.id} className="rounded-3xl p-4"
+                  style={{ background: C.s1, border: `2px solid ${isProfit ? C.green + "44" : C.red + "44"}` }}>
+                  {/* Header row */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black px-3 py-1 rounded-full"
+                        style={{
+                          background: trade.direction === "BUY" ? "#00e67615" : "#ff444415",
+                          color: trade.direction === "BUY" ? C.green : C.red,
+                          border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}44`,
+                        }}>{trade.direction}</span>
+                      <span className="text-base font-black">{trade.instrument.replace("_", "/")}</span>
+                      <span className="text-xs" style={{ color: C.muted }}>{durationStr}</span>
                     </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: isProfit ? C.green : C.red }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-black font-mono" style={{ color: isProfit ? C.green : C.red }}>
                         {isProfit ? "+" : ""}{livePips.toFixed(1)}p
                       </span>
-                      <Button size="sm" onClick={() => closeTradeMutation.mutate({ tradeId: trade.id })}
-                        style={{ background: C.red + "22", color: C.red, border: `1px solid ${C.red}44`, fontSize: 9, padding: "4px 10px" }}>
+                      <button onClick={() => closeTradeMutation.mutate({ tradeId: trade.id })}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-90 transition-transform"
+                        style={{ background: "#ff444420", color: C.red, border: `1px solid ${C.red}44` }}>
                         Close
-                      </Button>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Live price */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+                  {/* Price grid */}
+                  <div className="grid grid-cols-4 gap-2 mb-3">
                     {[
                       { k: "Entry", v: trade.entryPrice.toFixed(dp) },
-                      { k: "Current", v: currentPrice.toFixed(dp), col: isProfit ? C.green : C.red },
+                      { k: "Now", v: currentPrice.toFixed(dp), col: isProfit ? C.green : C.red },
                       { k: "SL", v: trade.stopLoss.toFixed(dp), col: C.red },
                       { k: "TP", v: trade.takeProfit.toFixed(dp), col: C.green },
                     ].map(({ k, v, col }) => (
-                      <div key={k} style={{ background: C.s2, borderRadius: 6, padding: "6px 8px" }}>
-                        <p style={{ fontSize: 9, color: C.muted }}>{k}</p>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: col ?? C.text, fontFamily: "monospace" }}>{v}</p>
+                      <div key={k} className="rounded-xl p-2 text-center" style={{ background: C.s2 }}>
+                        <p className="text-xs mb-0.5" style={{ color: C.muted }}>{k}</p>
+                        <p className="text-xs font-black font-mono" style={{ color: col ?? C.text }}>{v}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* TP progress bar */}
-                  <div style={{ marginBottom: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 9, color: C.muted }}>Progress to TP</span>
-                      <span style={{ fontSize: 9, color: isProfit ? C.green : C.muted }}>{progress.toFixed(0)}%</span>
+                  {/* Progress bar */}
+                  <div className="mb-2">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-xs" style={{ color: C.muted }}>Progress to TP</span>
+                      <span className="text-xs font-bold" style={{ color: isProfit ? C.green : C.muted }}>{progress.toFixed(0)}%</span>
                     </div>
-                    <div style={{ height: 4, background: C.s2, borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.max(0, progress)}%`, background: isProfit ? C.green : C.red, borderRadius: 2, transition: "width 0.5s ease" }} />
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: C.s2 }}>
+                      <div className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.max(0, progress)}%`, background: isProfit ? C.green : C.red }} />
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 9, color: C.muted }}>{trade.units.toLocaleString()} units</span>
-                    <span style={{ fontSize: 9, color: isProfit ? C.green : C.red }}>
-                      Unrealised: {isProfit ? "+" : ""}{(trade.unrealisedPnl ?? 0).toFixed(2)} {currency}
+                  <div className="flex justify-between">
+                    <span className="text-xs" style={{ color: C.muted }}>{trade.units.toLocaleString()} units</span>
+                    <span className="text-xs font-bold" style={{ color: isProfit ? C.green : C.red }}>
+                      {isProfit ? "+" : ""}{(trade.unrealisedPnl ?? 0).toFixed(2)} {currency}
                     </span>
                   </div>
-                </Card>
+                </div>
               );
             })}
           </div>
@@ -369,94 +432,110 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
 
         {/* ── HISTORY ── */}
         {tab === "history" && (
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
-              <StatCard label="TOTAL TRADES" value={String(history?.length ?? 0)} />
-              <StatCard label="WIN RATE" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
-              <StatCard label="PROFIT FACTOR" value={pf.toString()} color={parseFloat(pf) >= 1.5 ? C.green : C.amber} />
-              <StatCard label="TOTAL P&L" value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)} ${currency}`} color={totalPnl >= 0 ? C.green : C.red} />
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <StatPill label="Total Trades" value={String(history?.length ?? 0)} />
+              <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
+              <StatPill label="Profit Factor" value={pf.toString()} color={parseFloat(pf) >= 1.5 ? C.green : C.amber} />
+              <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} sub={currency} />
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(history ?? []).slice(0, 50).map((trade: any, i: number) => (
-                <Card key={i} style={{ background: C.s1, border: `1px solid ${trade.won ? C.green + "33" : C.red + "33"}`, padding: "10px 14px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: trade.direction === "BUY" ? C.green + "22" : C.red + "22", color: trade.direction === "BUY" ? C.green : C.red, border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}33` }}>{trade.direction}</span>
-                      <span style={{ fontSize: 11, fontWeight: 700 }}>{trade.instrument?.replace("_", "/")}</span>
-                      <span style={{ fontSize: 9, color: C.muted }}>{trade.closeReason ?? "—"}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                      <span style={{ fontSize: 10, color: C.muted }}>{(trade.pips ?? 0) >= 0 ? "+" : ""}{(trade.pips ?? 0).toFixed(1)}p</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: trade.won ? C.green : C.red }}>
-                        {trade.won ? "+" : ""}{(trade.pnl ?? 0).toFixed(2)} {currency}
-                      </span>
-                    </div>
+
+            {/* Backtest link */}
+            <button onClick={() => setTab("backtest")}
+              className="w-full flex items-center justify-between p-4 rounded-2xl active:scale-98 transition-transform"
+              style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <div className="flex items-center gap-3">
+                <FlaskConical className="w-5 h-5" style={{ color: C.blue }} />
+                <span className="text-sm font-bold">Run a Backtest</span>
+              </div>
+              <ChevronRight className="w-4 h-4" style={{ color: C.muted }} />
+            </button>
+
+            {(history ?? []).slice(0, 50).map((trade: any, i: number) => (
+              <div key={i} className="rounded-2xl p-4"
+                style={{ background: C.s1, border: `1px solid ${trade.won ? C.green + "33" : C.red + "33"}` }}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black px-2.5 py-1 rounded-full"
+                      style={{
+                        background: trade.direction === "BUY" ? "#00e67615" : "#ff444415",
+                        color: trade.direction === "BUY" ? C.green : C.red,
+                        border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}33`,
+                      }}>{trade.direction}</span>
+                    <span className="text-sm font-black">{trade.instrument?.replace("_", "/")}</span>
                   </div>
-                  <div style={{ display: "flex", gap: 16, marginTop: 6 }}>
-                    <span style={{ fontSize: 9, color: C.muted }}>Entry: {(trade.entryPrice ?? 0).toFixed(5)}</span>
-                    <span style={{ fontSize: 9, color: C.muted }}>Exit: {(trade.exitPrice ?? 0).toFixed(5)}</span>
-                    <span style={{ fontSize: 9, color: C.muted }}>{trade.closedAt ? new Date(trade.closedAt).toLocaleString() : "—"}</span>
-                  </div>
-                </Card>
-              ))}
-              {(!history || history.length === 0) && (
-                <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 24, textAlign: "center" }}>
-                  <p style={{ color: C.muted, fontSize: 12 }}>No closed trades yet</p>
-                </Card>
-              )}
-            </div>
+                  <span className="text-base font-black font-mono" style={{ color: trade.won ? C.green : C.red }}>
+                    {trade.won ? "+" : ""}{(trade.pnl ?? 0).toFixed(2)} {currency}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-mono" style={{ color: C.muted }}>{(trade.pips ?? 0) >= 0 ? "+" : ""}{(trade.pips ?? 0).toFixed(1)}p</span>
+                  <span className="text-xs" style={{ color: C.muted }}>{trade.closeReason ?? "—"}</span>
+                  <span className="text-xs ml-auto" style={{ color: C.muted }}>{trade.closedAt ? new Date(trade.closedAt).toLocaleDateString() : "—"}</span>
+                </div>
+              </div>
+            ))}
+            {(!history || history.length === 0) && (
+              <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
+                style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <Target className="w-10 h-10" style={{ color: C.muted }} />
+                <p className="text-sm font-bold" style={{ color: C.muted }}>No closed trades yet</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── BACKTEST ── */}
+        {/* ── BACKTEST (accessible from History tab button) ── */}
         {tab === "backtest" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>RUN BACKTEST</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 12 }}>
+          <div className="space-y-4">
+            <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <SectionTitle>Run Backtest</SectionTitle>
+              <div className="space-y-3 mb-4">
                 {[
                   { label: "Pair", value: backtestPair, options: ["EUR_USD", "GBP_USD", "USD_JPY", "EUR_GBP", "AUD_USD", "USD_CHF", "USD_CAD", "NZD_USD"], onChange: setBacktestPair },
                   { label: "Timeframe", value: backtestGranularity, options: ["M5", "M15", "M30", "H1", "H4"], onChange: setBacktestGranularity },
                 ].map(({ label, value, options, onChange }) => (
                   <div key={label}>
-                    <p style={{ fontSize: 9, color: C.muted, marginBottom: 4 }}>{label}</p>
-                    <select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", padding: "8px 10px", background: C.s2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: "monospace", fontSize: 11 }}>
+                    <p className="text-xs font-bold tracking-widest uppercase mb-1.5" style={{ color: C.muted }}>{label}</p>
+                    <select value={value} onChange={e => onChange(e.target.value)}
+                      className="w-full rounded-xl px-4 py-3 text-sm font-mono outline-none"
+                      style={{ background: C.s2, border: `1px solid ${C.border}`, color: C.text }}>
                       {options.map(o => <option key={o} value={o}>{o.replace("_", "/")}</option>)}
                     </select>
                   </div>
                 ))}
                 <div>
-                  <p style={{ fontSize: 9, color: C.muted, marginBottom: 4 }}>Candles</p>
-                  <select value={backtestCount} onChange={e => setBacktestCount(Number(e.target.value))} style={{ width: "100%", padding: "8px 10px", background: C.s2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: "monospace", fontSize: 11 }}>
+                  <p className="text-xs font-bold tracking-widest uppercase mb-1.5" style={{ color: C.muted }}>Candles</p>
+                  <select value={backtestCount} onChange={e => setBacktestCount(Number(e.target.value))}
+                    className="w-full rounded-xl px-4 py-3 text-sm font-mono outline-none"
+                    style={{ background: C.s2, border: `1px solid ${C.border}`, color: C.text }}>
                     {[200, 500, 1000, 2000].map(n => <option key={n} value={n}>{n} candles</option>)}
                   </select>
                 </div>
               </div>
-              <Button onClick={() => backtestMutation.mutate({ instrument: backtestPair, granularity: backtestGranularity, count: backtestCount })}
+              <button onClick={() => backtestMutation.mutate({ instrument: backtestPair, granularity: backtestGranularity, count: backtestCount })}
                 disabled={backtestMutation.isPending}
-                style={{ background: C.amber, color: C.bg, fontFamily: "monospace", fontSize: 11, fontWeight: 700 }}>
+                className="w-full py-4 rounded-2xl font-black text-sm tracking-wide active:scale-95 transition-transform disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, #448aff, #2979ff)", color: "#fff" }}>
                 {backtestMutation.isPending ? "Running..." : "▶ Run Backtest"}
-              </Button>
-            </Card>
+              </button>
+            </div>
 
             {backtestMutation.data && (() => {
               const r = backtestMutation.data;
               return (
                 <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-                    <StatCard label="WIN RATE" value={`${(r.winRate * 100).toFixed(1)}%`} color={r.winRate >= 0.55 ? C.green : C.amber} />
-                    <StatCard label="PROFIT FACTOR" value={r.profitFactor.toFixed(2)} color={r.profitFactor >= 1.5 ? C.green : C.amber} />
-                    <StatCard label="TOTAL PIPS" value={`${r.totalPips >= 0 ? "+" : ""}${r.totalPips.toFixed(1)}`} color={r.totalPips >= 0 ? C.green : C.red} />
-                    <StatCard label="MAX DRAWDOWN" value={`${(r.maxDrawdown * 100).toFixed(1)}%`} color={r.maxDrawdown < 0.05 ? C.green : C.red} />
-                    <StatCard label="TRADES" value={String(r.totalTrades)} sub={`${r.wins}W / ${r.losses}L`} />
-                    <StatCard label="AVG WIN" value={`+${r.avgWinPips.toFixed(1)}p`} color={C.green} />
-                    <StatCard label="AVG LOSS" value={`-${r.avgLossPips.toFixed(1)}p`} color={C.red} />
-                    <StatCard label="EXPECTANCY" value={`${r.expectancy >= 0 ? "+" : ""}${r.expectancy.toFixed(1)}p`} color={r.expectancy >= 0 ? C.green : C.red} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatPill label="Win Rate" value={`${(r.winRate * 100).toFixed(1)}%`} color={r.winRate >= 0.55 ? C.green : C.amber} />
+                    <StatPill label="Profit Factor" value={r.profitFactor.toFixed(2)} color={r.profitFactor >= 1.5 ? C.green : C.amber} />
+                    <StatPill label="Total Pips" value={`${r.totalPips >= 0 ? "+" : ""}${r.totalPips.toFixed(1)}`} color={r.totalPips >= 0 ? C.green : C.red} />
+                    <StatPill label="Max Drawdown" value={`${(r.maxDrawdown * 100).toFixed(1)}%`} color={r.maxDrawdown < 0.05 ? C.green : C.red} />
+                    <StatPill label="Trades" value={String(r.totalTrades)} sub={`${r.wins}W / ${r.losses}L`} />
+                    <StatPill label="Expectancy" value={`${r.expectancy >= 0 ? "+" : ""}${r.expectancy.toFixed(1)}p`} color={r.expectancy >= 0 ? C.green : C.red} />
                   </div>
-
-                  <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>BACKTEST EQUITY CURVE</p>
-                    <ResponsiveContainer width="100%" height={200}>
+                  <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                    <SectionTitle>Backtest Equity Curve</SectionTitle>
+                    <ResponsiveContainer width="100%" height={180}>
                       <AreaChart data={r.equityCurve}>
                         <defs>
                           <linearGradient id="btGrad" x1="0" y1="0" x2="0" y2="1">
@@ -467,25 +546,11 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
                         <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                         <XAxis dataKey="index" tick={{ fontSize: 9, fill: C.muted }} />
                         <YAxis tick={{ fontSize: 9, fill: C.muted }} domain={["auto", "auto"]} />
-                        <Tooltip contentStyle={{ background: C.s2, border: `1px solid ${C.border}`, fontSize: 10, fontFamily: "monospace" }} />
+                        <Tooltip contentStyle={{ background: "#0c1525", border: `1px solid ${C.border}`, fontSize: 10, fontFamily: "monospace", borderRadius: 12 }} />
                         <Area type="monotone" dataKey="equity" stroke={C.blue} strokeWidth={2} fill="url(#btGrad)" dot={false} />
                       </AreaChart>
                     </ResponsiveContainer>
-                  </Card>
-
-                  <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>TRADE DISTRIBUTION (PIPS)</p>
-                    <ResponsiveContainer width="100%" height={150}>
-                      <BarChart data={r.trades.slice(0, 50).map((t, i) => ({ i, pips: t.pips, fill: t.pips >= 0 ? C.green : C.red }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                        <XAxis dataKey="i" tick={{ fontSize: 8, fill: C.muted }} />
-                        <YAxis tick={{ fontSize: 8, fill: C.muted }} />
-                        <Tooltip contentStyle={{ background: C.s2, border: `1px solid ${C.border}`, fontSize: 10, fontFamily: "monospace" }} />
-                        <ReferenceLine y={0} stroke={C.muted} />
-                        <Bar dataKey="pips" fill={C.blue} radius={[2, 2, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </Card>
+                  </div>
                 </>
               );
             })()}
@@ -494,159 +559,180 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
 
         {/* ── AI ── */}
         {tab === "ai" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {/* Funded readiness */}
+          <div className="space-y-4">
             {readiness && (
-              <Card style={{ background: C.s1, border: `1px solid ${readiness.readyForFunded ? C.green + "44" : C.border}`, padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: C.amber }}>🎯 FUNDED ACCOUNT READINESS</p>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: readiness.readyForFunded ? C.green : C.amber }}>
-                    {readiness.passing}/{readiness.total} criteria
+              <div className="rounded-3xl p-4"
+                style={{ background: C.s1, border: `2px solid ${readiness.readyForFunded ? C.green + "44" : C.border}` }}>
+                <div className="flex items-center justify-between mb-3">
+                  <SectionTitle>🎯 Funded Readiness</SectionTitle>
+                  <span className="text-sm font-black" style={{ color: readiness.readyForFunded ? C.green : C.amber }}>
+                    {readiness.passing}/{readiness.total}
                   </span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="space-y-2">
                   {readiness.criteria.map((c: any, i: number) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: C.s2, borderRadius: 6 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        {c.pass ? <CheckCircle2 style={{ width: 12, height: 12, color: C.green }} /> : <XCircle style={{ width: 12, height: 12, color: C.red }} />}
-                        <span style={{ fontSize: 10, color: c.pass ? C.text : C.muted }}>{c.label}</span>
+                    <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl"
+                      style={{ background: C.s2 }}>
+                      <div className="flex items-center gap-2">
+                        {c.pass ? <CheckCircle2 className="w-4 h-4" style={{ color: C.green }} /> : <XCircle className="w-4 h-4" style={{ color: C.red }} />}
+                        <span className="text-sm" style={{ color: c.pass ? C.text : C.muted }}>{c.label}</span>
                       </div>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: c.pass ? C.green : C.red }}>{c.value}</span>
+                      <span className="text-sm font-black" style={{ color: c.pass ? C.green : C.red }}>{c.value}</span>
                     </div>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* Learned params */}
             {learning && (
-              <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>🔬 LEARNED PARAMETERS (v{learning.totalEvolutions} evolutions)</p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {Object.entries(learning.params ?? {}).filter(([k]) => !["version"].includes(k)).map(([k, v]) => (
-                    <div key={k} style={{ background: C.s2, borderRadius: 6, padding: "8px 10px" }}>
-                      <p style={{ fontSize: 9, color: C.muted }}>{k}</p>
-                      <p style={{ fontSize: 11, fontWeight: 700, color: C.blue }}>{typeof v === "number" ? v.toFixed(3) : String(v)}</p>
+              <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <SectionTitle>🔬 Learned Parameters (v{learning.totalEvolutions})</SectionTitle>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(learning.params ?? {}).filter(([k]) => k !== "version").map(([k, v]) => (
+                    <div key={k} className="rounded-xl p-3" style={{ background: C.s2 }}>
+                      <p className="text-xs mb-1" style={{ color: C.muted }}>{k}</p>
+                      <p className="text-sm font-black font-mono" style={{ color: C.blue }}>
+                        {typeof v === "number" ? v.toFixed(3) : String(v)}
+                      </p>
                     </div>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* Pair performance */}
             {learning && Object.keys(learning.pairs ?? {}).length > 0 && (
-              <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>📊 PAIR PERFORMANCE</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {Object.entries(learning.pairs).sort(([, a]: any, [, b]: any) => (b.wins / Math.max(1, b.wins + b.losses)) - (a.wins / Math.max(1, a.wins + a.losses))).map(([pair, p]: any) => {
+              <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <SectionTitle>📊 Pair Performance</SectionTitle>
+                <div className="space-y-2">
+                  {Object.entries(learning.pairs).sort(([, a]: any, [, b]: any) =>
+                    (b.wins / Math.max(1, b.wins + b.losses)) - (a.wins / Math.max(1, a.wins + a.losses))
+                  ).map(([pair, p]: any) => {
                     const total = p.wins + p.losses;
                     const wr = total > 0 ? (p.wins / total * 100).toFixed(0) : "—";
                     return (
-                      <div key={pair} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: C.s2, borderRadius: 6 }}>
-                        <span style={{ fontSize: 10 }}>{pair.replace("_", "/")}</span>
-                        <div style={{ display: "flex", gap: 12 }}>
-                          <span style={{ fontSize: 9, color: C.muted }}>{p.wins}W/{p.losses}L</span>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: parseFloat(wr) >= 55 ? C.green : parseFloat(wr) >= 40 ? C.amber : C.red }}>{wr}%</span>
+                      <div key={pair} className="flex items-center justify-between py-2.5 px-3 rounded-xl"
+                        style={{ background: C.s2 }}>
+                        <span className="text-sm font-bold">{pair.replace("_", "/")}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs" style={{ color: C.muted }}>{p.wins}W/{p.losses}L</span>
+                          <span className="text-sm font-black"
+                            style={{ color: parseFloat(wr) >= 55 ? C.green : parseFloat(wr) >= 40 ? C.amber : C.red }}>{wr}%</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* AI insights */}
             {learning && (learning.insights ?? []).length > 0 && (
-              <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>💡 AI INSIGHTS</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+              <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <SectionTitle>💡 AI Insights</SectionTitle>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {learning.insights.slice(-20).reverse().map((insight: string, i: number) => (
-                    <p key={i} style={{ fontSize: 9, color: C.muted, lineHeight: 1.5 }}>• {insight}</p>
+                    <p key={i} className="text-xs leading-relaxed" style={{ color: C.mutedLight }}>• {insight}</p>
                   ))}
                 </div>
-              </Card>
+              </div>
+            )}
+
+            {!learning && !readiness && (
+              <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
+                style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <Brain className="w-10 h-10" style={{ color: C.muted }} />
+                <p className="text-sm font-bold" style={{ color: C.muted }}>AI learning in progress</p>
+                <p className="text-xs text-center" style={{ color: C.muted }}>Data will appear after the first trades</p>
+              </div>
             )}
           </div>
         )}
 
         {/* ── SETTINGS ── */}
         {tab === "settings" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
+          <div className="space-y-4">
             {/* Prop Firm Mode */}
-            <Card style={{ background: C.s1, border: `1px solid ${propFirmEnabled ? C.amber + "44" : C.border}`, padding: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <Shield style={{ width: 16, height: 16, color: C.amber }} />
-                  <p style={{ fontSize: 11, fontWeight: 700, color: C.amber }}>PROP FIRM MODE</p>
+            <div className="rounded-3xl p-4"
+              style={{ background: C.s1, border: `2px solid ${propFirmEnabled ? C.amber + "44" : C.border}` }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ background: "#f5a62320" }}>
+                    <Shield className="w-5 h-5" style={{ color: C.amber }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black" style={{ color: C.text }}>Prop Firm Mode</p>
+                    <p className="text-xs" style={{ color: C.muted }}>Strict risk rules</p>
+                  </div>
                 </div>
                 <button onClick={() => {
                   const next = !propFirmEnabled;
                   setPropFirmEnabled(next);
                   propFirmMutation.mutate({ enabled: next, maxDailyLossPct: 5, maxTotalDrawdownPct: 10, profitTargetPct: 10 });
-                }} style={{
-                  padding: "6px 16px", borderRadius: 20, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                  background: propFirmEnabled ? C.green + "22" : C.s2,
-                  color: propFirmEnabled ? C.green : C.muted,
-                  border: `1px solid ${propFirmEnabled ? C.green : C.border}`,
-                }}>
-                  {propFirmEnabled ? "ENABLED" : "DISABLED"}
+                }} className="relative w-12 h-6 rounded-full transition-all duration-200"
+                  style={{ background: propFirmEnabled ? C.green : C.muted }}>
+                  <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+                    style={{ left: propFirmEnabled ? "calc(100% - 1.375rem)" : "0.125rem" }} />
                 </button>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="space-y-2">
                 {[
-                  "Risk per trade reduced to 0.5% (from 1%)",
-                  "Max 2 concurrent trades (from 3)",
-                  "Daily loss guard: 5% of account",
-                  "Total drawdown limit: 10% of account",
-                  "Profit target: 10% of account",
-                  "Telegram alert when limits approached",
+                  "Risk per trade: 0.5% (from 1%)",
+                  "Max 2 concurrent trades",
+                  "Daily loss guard: 5%",
+                  "Total drawdown limit: 10%",
+                  "Profit target: 10%",
                 ].map((rule, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <CheckCircle2 style={{ width: 10, height: 10, color: propFirmEnabled ? C.green : C.muted }} />
-                    <span style={{ fontSize: 10, color: propFirmEnabled ? C.text : C.muted }}>{rule}</span>
+                  <div key={i} className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: propFirmEnabled ? C.green : C.muted }} />
+                    <span className="text-xs" style={{ color: propFirmEnabled ? C.text : C.muted }}>{rule}</span>
                   </div>
                 ))}
               </div>
-            </Card>
+            </div>
 
             {/* Telegram */}
-            <Card style={{ background: C.s1, border: `1px solid ${telegramConfig?.enabled ? C.blue + "44" : C.border}`, padding: 16 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-                <Bell style={{ width: 16, height: 16, color: C.blue }} />
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.amber }}>TELEGRAM NOTIFICATIONS</p>
-                {telegramConfig?.enabled && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: C.blue + "22", color: C.blue, border: `1px solid ${C.blue}44` }}>ACTIVE</span>}
+            <div className="rounded-3xl p-4"
+              style={{ background: C.s1, border: `2px solid ${telegramConfig?.enabled ? C.blue + "44" : C.border}` }}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: "#448aff20" }}>
+                  <Bell className="w-5 h-5" style={{ color: C.blue }} />
+                </div>
+                <div>
+                  <p className="text-sm font-black" style={{ color: C.text }}>Telegram Alerts</p>
+                  <p className="text-xs" style={{ color: telegramConfig?.enabled ? C.blue : C.muted }}>
+                    {telegramConfig?.enabled ? "Active" : "Not configured"}
+                  </p>
+                </div>
               </div>
-              <p style={{ fontSize: 9, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
-                Get instant push notifications on your phone when trades open/close.<br />
-                1. Message @BotFather on Telegram → /newbot → copy the token<br />
-                2. Message your bot, then visit: api.telegram.org/bot[TOKEN]/getUpdates to get your chat ID
+              <p className="text-xs leading-relaxed mb-3" style={{ color: C.mutedLight }}>
+                1. Message @BotFather → /newbot → copy token{"\n"}
+                2. Message your bot, visit api.telegram.org/bot[TOKEN]/getUpdates for chat ID
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                <div>
-                  <p style={{ fontSize: 9, color: C.muted, marginBottom: 4 }}>Bot Token</p>
-                  <input type="password" value={telegramToken} onChange={e => { setTelegramToken(e.target.value); setTelegramSaved(false); }}
-                    placeholder="123456789:ABCdef..."
-                    style={{ width: "100%", padding: "8px 10px", background: C.s2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: "monospace", fontSize: 11 }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: 9, color: C.muted, marginBottom: 4 }}>Chat ID</p>
-                  <input type="text" value={telegramChatId} onChange={e => { setTelegramChatId(e.target.value); setTelegramSaved(false); }}
-                    placeholder="-1001234567890"
-                    style={{ width: "100%", padding: "8px 10px", background: C.s2, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: "monospace", fontSize: 11 }} />
-                </div>
+              <div className="space-y-3 mb-3">
+                <input type="password" value={telegramToken}
+                  onChange={e => { setTelegramToken(e.target.value); setTelegramSaved(false); }}
+                  placeholder="Bot token: 123456789:ABCdef..."
+                  className="w-full rounded-xl px-4 py-3 text-sm font-mono outline-none"
+                  style={{ background: C.s2, border: `1px solid ${C.border}`, color: C.text }} />
+                <input type="text" value={telegramChatId}
+                  onChange={e => { setTelegramChatId(e.target.value); setTelegramSaved(false); }}
+                  placeholder="Chat ID: -1001234567890"
+                  className="w-full rounded-xl px-4 py-3 text-sm font-mono outline-none"
+                  style={{ background: C.s2, border: `1px solid ${C.border}`, color: C.text }} />
               </div>
-              <Button onClick={() => telegramMutation.mutate({ token: telegramToken, chatId: telegramChatId })}
+              <button onClick={() => telegramMutation.mutate({ token: telegramToken, chatId: telegramChatId })}
                 disabled={!telegramToken || !telegramChatId || telegramMutation.isPending}
-                style={{ background: telegramSaved ? C.green : C.blue, color: C.bg, fontFamily: "monospace", fontSize: 11, fontWeight: 700 }}>
+                className="w-full py-3.5 rounded-2xl font-black text-sm tracking-wide active:scale-95 transition-transform disabled:opacity-40"
+                style={{ background: telegramSaved ? `linear-gradient(135deg, ${C.green}, #00c853)` : "linear-gradient(135deg, #448aff, #2979ff)", color: "#fff" }}>
                 {telegramSaved ? "✓ Saved" : telegramMutation.isPending ? "Saving..." : "Save & Enable"}
-              </Button>
-            </Card>
+              </button>
+            </div>
 
             {/* Bot config */}
-            <Card style={{ background: C.s1, border: `1px solid ${C.border}`, padding: 16 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 12 }}>BOT CONFIGURATION</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <SectionTitle>Bot Configuration</SectionTitle>
+              <div className="space-y-0">
                 {[
                   { label: "Risk per Trade", value: `${s?.config?.riskPercent ?? 1}%` },
                   { label: "Max Concurrent Trades", value: String(s?.config?.maxConcurrentTrades ?? 3) },
@@ -654,16 +740,64 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
                   { label: "TP Multiplier (ATR)", value: `${s?.config?.tpAtrMultiplier ?? 3.0}x` },
                   { label: "Min Confidence", value: `${((s?.config?.minConfidence ?? 0.78) * 100).toFixed(0)}%` },
                   { label: "Session Filter", value: s?.config?.sessions?.join(", ") ?? "ALL" },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 10, color: C.muted }}>{label}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: C.text }}>{value}</span>
+                ].map(({ label, value }, i, arr) => (
+                  <div key={label} className="flex items-center justify-between py-3"
+                    style={{ borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <span className="text-sm" style={{ color: C.mutedLight }}>{label}</span>
+                    <span className="text-sm font-black" style={{ color: C.text }}>{value}</span>
                   </div>
                 ))}
               </div>
-            </Card>
+            </div>
+
+            {/* Danger zone */}
+            <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <SectionTitle>Account</SectionTitle>
+              <button onClick={onLogout}
+                className="w-full flex items-center justify-between py-3.5 px-4 rounded-2xl active:scale-95 transition-transform"
+                style={{ background: "#ff444415", border: `1px solid ${C.red}33` }}>
+                <div className="flex items-center gap-3">
+                  <LogOut className="w-4 h-4" style={{ color: C.red }} />
+                  <span className="text-sm font-bold" style={{ color: C.red }}>Disconnect Account</span>
+                </div>
+                <ChevronRight className="w-4 h-4" style={{ color: C.red }} />
+              </button>
+            </div>
           </div>
         )}
+      </div>
+
+      {/* ── Bottom navigation bar ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50"
+        style={{
+          background: "rgba(5, 12, 26, 0.97)",
+          borderTop: `1px solid ${C.border}`,
+          backdropFilter: "blur(20px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}>
+        <div className="flex items-stretch">
+          {navItems.map((item) => (
+            <button key={item.id}
+              onClick={() => setTab(item.id)}
+              className="flex-1 flex flex-col items-center justify-center py-3 gap-1 relative transition-all duration-150 active:scale-90"
+              style={{ color: tab === item.id ? C.amber : C.muted }}>
+              {item.badge !== undefined && (
+                <div className="absolute top-2 right-1/2 translate-x-3 w-4 h-4 rounded-full flex items-center justify-center text-xs font-black"
+                  style={{ background: C.red, color: "#fff", fontSize: 9 }}>
+                  {item.badge}
+                </div>
+              )}
+              <div style={{ color: tab === item.id ? C.amber : C.muted }}>
+                {item.icon}
+              </div>
+              <span className="text-xs font-bold" style={{ fontSize: 10 }}>{item.label}</span>
+              {tab === item.id && (
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
+                  style={{ background: C.amber }} />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
