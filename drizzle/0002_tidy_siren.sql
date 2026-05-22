@@ -1,0 +1,2 @@
+ALTER TABLE `adaptiveThresholds` MODIFY COLUMN `winRate` decimal(5,2) NOT NULL DEFAULT '0.00';--> statement-breakpoint
+ALTER TABLE `dailyLossGuard` MODIFY COLUMN `currentDrawdownPercent` decimal(8,4) NOT NULL DEFAULT '0.0000';

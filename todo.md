@@ -93,3 +93,11 @@
 - [x] Monitor performance for 24-48 hours — ongoing, learning engine active
 - [x] Optimize signal filter for 75-90% win rate target — v7 engine: 11 gates, Kelly sizing, sweep detection
 - [x] Analyze performance heatmap and adjust watchlist — learning engine auto-manages pair confidence thresholds
+
+## v8 Upgrades
+- [ ] Backtesting engine: run signals on historical candles, return trade list + equity curve
+- [ ] Backtest tab in frontend: pair selector, date range, results chart + stats table
+- [ ] Prop firm challenge mode: enforce max 5% daily loss, 10% total drawdown, min trading days
+- [ ] Prop firm mode toggle in Settings tab
+- [ ] Telegram notifications: trade open/close alerts with P&L
+- [ ] Telegram config (bot token + chat ID) in Settings tab
