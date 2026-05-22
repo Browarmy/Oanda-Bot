@@ -181,7 +181,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-50 flex items-center justify-between px-5 py-3"
-        style={{ background: "rgba(5, 12, 26, 0.95)", borderBottom: `1px solid ${C.border}`, backdropFilter: "blur(20px)" }}>
+        style={{ background: "rgba(5, 12, 26, 0.97)", borderBottom: `1px solid ${C.border}`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", zIndex: 100 }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)" }}>
@@ -239,7 +239,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
       </div>
 
       {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto pb-24 px-4 pt-4 space-y-4">
+      <div className="flex-1 overflow-y-auto pb-28 px-4 pt-4 space-y-4" style={{ paddingTop: "1rem" }}>
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (
@@ -452,9 +452,10 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
             </button>
 
             {(history ?? []).slice(0, 50).map((trade: any, i: number) => (
-              <div key={i} className="rounded-2xl p-4"
+              <div key={i} className="rounded-2xl overflow-hidden"
                 style={{ background: C.s1, border: `1px solid ${trade.won ? C.green + "33" : C.red + "33"}` }}>
-                <div className="flex items-center justify-between mb-2">
+                {/* Top row: direction badge, pair, P&L */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-black px-2.5 py-1 rounded-full"
                       style={{
@@ -462,16 +463,36 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
                         color: trade.direction === "BUY" ? C.green : C.red,
                         border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}33`,
                       }}>{trade.direction}</span>
-                    <span className="text-sm font-black">{trade.instrument?.replace("_", "/")}</span>
+                    <span className="text-base font-black">{trade.instrument?.replace("_", "/")}</span>
                   </div>
-                  <span className="text-base font-black font-mono" style={{ color: trade.won ? C.green : C.red }}>
-                    {trade.won ? "+" : ""}{(trade.pnl ?? 0).toFixed(2)} {currency}
-                  </span>
+                  <div className="text-right">
+                    <p className="text-base font-black font-mono" style={{ color: trade.won ? C.green : C.red }}>
+                      {trade.won ? "+" : ""}{(trade.pnl ?? 0).toFixed(2)} {currency}
+                    </p>
+                    <p className="text-xs font-mono" style={{ color: trade.won ? C.green + "aa" : C.red + "aa" }}>
+                      {(trade.pips ?? 0) >= 0 ? "+" : ""}{(trade.pips ?? 0).toFixed(1)} pips
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs font-mono" style={{ color: C.muted }}>{(trade.pips ?? 0) >= 0 ? "+" : ""}{(trade.pips ?? 0).toFixed(1)}p</span>
-                  <span className="text-xs" style={{ color: C.muted }}>{trade.closeReason ?? "—"}</span>
-                  <span className="text-xs ml-auto" style={{ color: C.muted }}>{trade.closedAt ? new Date(trade.closedAt).toLocaleDateString() : "—"}</span>
+                {/* Bottom row: entry, exit, reason, date */}
+                <div className="flex items-center gap-3 px-4 pb-3 pt-1"
+                  style={{ borderTop: `1px solid ${C.border}33` }}>
+                  <div className="flex-1">
+                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Entry</p>
+                    <p className="text-xs font-mono font-bold" style={{ color: C.text }}>{(trade.entryPrice ?? 0).toFixed(5)}</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Exit</p>
+                    <p className="text-xs font-mono font-bold" style={{ color: C.text }}>{(trade.exitPrice ?? 0).toFixed(5)}</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Reason</p>
+                    <p className="text-xs font-bold" style={{ color: C.mutedLight }}>{trade.closeReason ?? "—"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Date</p>
+                    <p className="text-xs" style={{ color: C.mutedLight }}>{trade.closedAt ? new Date(trade.closedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}</p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -768,7 +789,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
       </div>
 
       {/* ── Bottom navigation bar ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-50"
+      <div className="fixed bottom-0 left-0 right-0 z-40"
         style={{
           background: "rgba(5, 12, 26, 0.97)",
           borderTop: `1px solid ${C.border}`,
