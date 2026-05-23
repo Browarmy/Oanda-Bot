@@ -725,7 +725,7 @@ export class AutonomousEngine extends EventEmitter {
   private async backfillClosedTrades() {
     if (!this.api) return;
     try {
-      const closedTrades = await this.api.getClosedTrades(50);
+      const closedTrades = await this.api.getClosedTrades(500);
       let added = 0;
       for (const t of closedTrades) {
         if (this.recordedClosedIds.has(t.id)) continue;
@@ -762,7 +762,7 @@ export class AutonomousEngine extends EventEmitter {
         added++;
       }
       this.state.tradeHistory.sort((a, b) => b.closedAt - a.closedAt);
-      if (this.state.tradeHistory.length > 200) this.state.tradeHistory.splice(200);
+      if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.splice(1000);
       if (added > 0) this.log(`📊 Backfilled ${added} closed trades from OANDA`);
     } catch (e: any) {
       this.log(`Backfill error: ${e.message}`);
@@ -1269,7 +1269,7 @@ export class AutonomousEngine extends EventEmitter {
           pnl, pips: parseFloat(pips.toFixed(1)), won, closeReason,
         };
         this.state.tradeHistory.unshift(closed);
-        if (this.state.tradeHistory.length > 200) this.state.tradeHistory.pop();
+        if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.pop();
         if (won) this.state.totalWins++; else this.state.totalLosses++;
         this.state.totalPnl += pnl;
         const pair = this.state.pairs.find(p => p.instrument === instrument);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import TradeChartModal from "@/components/TradeChartModal";
 import { trpc } from "@/lib/trpc";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -58,6 +59,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const [backtestCount, setBacktestCount] = useState(500);
   const [isConnected, setIsConnected] = useState(false);
   const [connectError, setConnectError] = useState("");
+  const [selectedTrade, setSelectedTrade] = useState<any | null>(null);
 
   const connectMutation = trpc.bot.connect.useMutation({
     onSuccess: () => setIsConnected(true),
@@ -75,19 +77,19 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
 
   const { data: state } = trpc.bot.getState.useQuery(undefined, {
     enabled: isConnected,
-    refetchInterval: 3000,
+    refetchInterval: 2000,
   });
   const { data: history } = trpc.bot.getHistory.useQuery(undefined, {
     enabled: isConnected,
-    refetchInterval: 10000,
+    refetchInterval: 2000,
   });
   const { data: learning } = trpc.bot.getLearningInsights.useQuery(undefined, {
     enabled: isConnected && tab === "ai",
-    refetchInterval: 30000,
+    refetchInterval: 2000,
   });
   const { data: readiness } = trpc.bot.getFundedReadiness.useQuery(undefined, {
     enabled: isConnected && tab === "ai",
-    refetchInterval: 30000,
+    refetchInterval: 2000,
   });
   const { data: telegramConfig } = trpc.bot.getTelegramConfig.useQuery(undefined, {
     enabled: isConnected,
@@ -177,6 +179,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
 
   // ── Main dashboard ──────────────────────────────────────────────────────────
   return (
+    <>
     <div className="min-h-screen flex flex-col" style={{ background: C.bg, color: C.text }}>
 
       {/* ── Sticky header ── */}
@@ -459,8 +462,9 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
               <ChevronRight className="w-4 h-4" style={{ color: C.muted }} />
             </button>
 
-            {(history ?? []).slice(0, 50).map((trade: any, i: number) => (
-              <div key={i} className="rounded-2xl overflow-hidden"
+            {(history ?? []).map((trade: any, i: number) => (
+              <div key={i} className="rounded-2xl overflow-hidden active:scale-[0.98] transition-transform cursor-pointer"
+                onClick={() => setSelectedTrade(trade)}
                 style={{ background: C.s1, border: `1px solid ${trade.won ? C.green + "33" : C.red + "33"}` }}>
                 {/* Top row: direction badge, pair, P&L */}
                 <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -829,5 +833,13 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
         </div>
       </div>
     </div>
+    {selectedTrade && (
+      <TradeChartModal
+        trade={selectedTrade}
+        currency={currency}
+        onClose={() => setSelectedTrade(null)}
+      />
+    )}
+    </>
   );
 }
