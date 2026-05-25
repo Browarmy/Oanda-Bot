@@ -190,7 +190,7 @@ const DEFAULT_CONFIG: BotConfig = {
   maxConcurrentTrades: 3,       // max 3 open at once (was 10)
   tpAtrMultiplier: 3.0,         // TP = 3x ATR (was 2.5)
   slAtrMultiplier: 1.5,         // SL = 1.5x ATR (was 1.0) — gives trades room
-  minSignalsRequired: 4,        // 4/5 signals required
+  minSignalsRequired: 3,        // 3/5 signals required (was 4 — too strict for current market)
   sessions: ["LONDON", "NEW_YORK", "LONDON_NY"], // active sessions only
   enabledPairs: [
     "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", "AUD_USD",
@@ -533,11 +533,13 @@ function generateSignal(
   if (buyCount >= minSignals) {
     action = "BUY";
     signalsAgreeing = buyCount;
-    reason = `BUY ${buyCount}/5 | H1:${h1TrendBull ? "✓" : "✗"} M15EMA:${m15EmaBull ? "✓" : "✗"} RSI:${rsiVal.toFixed(0)} MACD:${macdBull ? "+" : "-"} Price:${priceAboveEma ? "✓" : "✗"}`;
+    reason = `BUY ${buyCount}/5 | H1:${h1TrendBull ? "✓" : "✗"} M15EMA:${m15EmaBull ? "✓" : "✗"} RSI:${rsiVal.toFixed(0)} MACD:${macdBull ? "+" : "-"} Price:${priceAboveEma ? "✓" : "✗"} [${buyCore.map((s, i) => s ? String.fromCharCode(65+i) : "-").join("")}]`;
   } else if (sellCount >= minSignals) {
     action = "SELL";
     signalsAgreeing = sellCount;
-    reason = `SELL ${sellCount}/5 | H1:${h1TrendBear ? "✓" : "✗"} M15EMA:${m15EmaBear ? "✓" : "✗"} RSI:${rsiVal.toFixed(0)} MACD:${macdBear ? "-" : "+"} Price:${priceBelowEma ? "✓" : "✗"}`;
+    reason = `SELL ${sellCount}/5 | H1:${h1TrendBear ? "✓" : "✗"} M15EMA:${m15EmaBear ? "✓" : "✗"} RSI:${rsiVal.toFixed(0)} MACD:${macdBear ? "-" : "+"} Price:${priceBelowEma ? "✓" : "✗"} [${sellCore.map((s, i) => s ? String.fromCharCode(65+i) : "-").join("")}]`;
+  } else {
+    reason = `No signal [B:${buyCount} S:${sellCount}] | H1:${h1TrendBull ? "↑" : h1TrendBear ? "↓" : "→"} M15EMA:${m15EmaBull ? "↑" : m15EmaBear ? "↓" : "→"} RSI:${rsiVal.toFixed(0)} MACD:${macdBull ? "+" : "-"}`;
   }
 
   // Confidence: starts at signal ratio, boosted by bonus signals
