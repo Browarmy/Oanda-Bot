@@ -68,7 +68,43 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const pauseMutation = trpc.bot.pause.useMutation();
   const resumeMutation = trpc.bot.resume.useMutation();
   const stopMutation = trpc.bot.stop.useMutation();
-  const closeTradeMutation = trpc.bot.closeTrade.useMutation();
+  const [closingTrades, setClosingTrades] = useState<Set<string>>(new Set());
+  const playSound = (type: 'close' | 'reset') => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'close') {
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.2);
+      } else {
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.15);
+      }
+    } catch { /* ignore audio errors */ }
+  };
+  const closeTradeMutation = trpc.bot.closeTrade.useMutation({
+    onMutate: ({ tradeId }) => {
+      setClosingTrades(prev => { const n = new Set(Array.from(prev)); n.add(tradeId); return n; });
+      playSound('close');
+    },
+    onSettled: (_data, _err, { tradeId }) => {
+      setClosingTrades(prev => { const n = new Set(prev); n.delete(tradeId); return n; });
+    },
+  });
+  const resetStatsMutation = trpc.bot.resetStats.useMutation({
+    onSuccess: () => { playSound('reset'); },
+  });
   const propFirmMutation = trpc.bot.setPropFirmMode.useMutation();
   const telegramMutation = trpc.bot.setTelegramConfig.useMutation({
     onSuccess: () => setTelegramSaved(true),
@@ -394,10 +430,20 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
                       <span className="text-lg font-black font-mono" style={{ color: isProfit ? C.green : C.red }}>
                         {isProfit ? "+" : ""}{livePips.toFixed(1)}p
                       </span>
-                      <button onClick={() => closeTradeMutation.mutate({ tradeId: trade.id })}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-90 transition-transform"
-                        style={{ background: "#ff444420", color: C.red, border: `1px solid ${C.red}44` }}>
-                        Close
+                      <button
+                        onClick={() => { if (!closingTrades.has(trade.id)) closeTradeMutation.mutate({ tradeId: trade.id }); }}
+                        disabled={closingTrades.has(trade.id)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-90 transition-all disabled:opacity-60"
+                        style={{ background: closingTrades.has(trade.id) ? "#ff444440" : "#ff444420", color: C.red, border: `1px solid ${C.red}44`, minWidth: 56 }}>
+                        {closingTrades.has(trade.id) ? (
+                          <span className="flex items-center gap-1 justify-center">
+                            <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span>...</span>
+                          </span>
+                        ) : "Close"}
                       </button>
                     </div>
                   </div>
@@ -786,6 +832,18 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
             {/* Danger zone */}
             <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
               <SectionTitle>Account</SectionTitle>
+              <button
+                onClick={() => { if (window.confirm("Reset all stats and trade history? This cannot be undone.")) resetStatsMutation.mutate(); }}
+                disabled={resetStatsMutation.isPending}
+                className="w-full flex items-center justify-between py-3.5 px-4 rounded-2xl active:scale-95 transition-transform mb-2 disabled:opacity-50"
+                style={{ background: "#ff990015", border: `1px solid #ff990033` }}>
+                <div className="flex items-center gap-3">
+                  <span style={{ color: "#ff9900", fontSize: 16 }}>🔄</span>
+                  <span className="text-sm font-bold" style={{ color: "#ff9900" }}>
+                    {resetStatsMutation.isPending ? "Resetting..." : resetStatsMutation.isSuccess ? "✓ Stats Reset" : "Reset Stats & History"}
+                  </span>
+                </div>
+              </button>
               <button onClick={onLogout}
                 className="w-full flex items-center justify-between py-3.5 px-4 rounded-2xl active:scale-95 transition-transform"
                 style={{ background: "#ff444415", border: `1px solid ${C.red}33` }}>

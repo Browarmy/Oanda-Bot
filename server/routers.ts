@@ -337,6 +337,11 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // Reset all stats to zero for a clean slate
+    resetStats: publicProcedure.mutation(() => {
+      autonomousEngine.resetStats();
+      return { success: true };
+    }),
     // Get closed trade history
     getHistory: publicProcedure.query(() => {
       return autonomousEngine.getState().tradeHistory;

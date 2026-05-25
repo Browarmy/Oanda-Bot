@@ -1379,6 +1379,28 @@ export class AutonomousEngine extends EventEmitter {
     }
   }
 
+  resetStats() {
+    this.state.totalTrades = 0;
+    this.state.totalWins = 0;
+    this.state.totalLosses = 0;
+    this.state.totalPnl = 0;
+    this.state.tradeHistory = [];
+    this.state.equityCurve = [];
+    this.state.logs = [];
+    for (const pair of this.state.pairs) {
+      pair.wins = 0;
+      pair.losses = 0;
+      pair.totalPnl = 0;
+    }
+    Array.from(this.adaptiveWeights.keys()).forEach(key => {
+      this.adaptiveWeights.set(key, {
+        minConfidence: 0.78,
+        wins: 0, losses: 0, consecutiveLosses: 0,
+      });
+    });
+    this.log("\uD83D\uDD04 Stats reset \u2014 clean slate");
+  }
+
   private updateWeights(instrument: string, won: boolean) {
     const w = this.adaptiveWeights.get(instrument);
     if (!w) return;
