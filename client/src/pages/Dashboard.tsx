@@ -9,7 +9,7 @@ import {
   TrendingUp, TrendingDown, Zap, Pause, Play, LogOut,
   Settings, Activity, Target, CheckCircle2, XCircle,
   Brain, FlaskConical, Shield, Bell, RefreshCw, ChevronRight,
-  AlertCircle, BarChart2, Eye, EyeOff,
+  AlertCircle, BarChart2,
 } from "lucide-react";
 
 interface DashboardProps {
@@ -60,7 +60,6 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [connectError, setConnectError] = useState("");
   const [selectedTrade, setSelectedTrade] = useState<any | null>(null);
-  const [disabledPairs, setDisabledPairs] = useState<Set<string>>(new Set());
 
   const connectMutation = trpc.bot.connect.useMutation({
     onSuccess: () => setIsConnected(true),
@@ -151,18 +150,6 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const togglePairEnabled = (pair: string) => {
-    setDisabledPairs(prev => {
-      const n = new Set(prev);
-      if (n.has(pair)) {
-        n.delete(pair);
-      } else {
-        n.add(pair);
-      }
-      return n;
-    });
-  };
 
   const s = state;
   const balance = s?.accountBalance ?? 0;
@@ -365,37 +352,18 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
             <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
               <SectionTitle>Market Regimes</SectionTitle>
               <div className="space-y-2">
-                {Object.entries(regimes).slice(0, 8).map(([pair, regime]: [string, any]) => {
-                  const isPairDisabled = disabledPairs.has(pair);
-                  return (
-                    <div key={pair} className="flex items-center justify-between py-2 px-3 rounded-xl"
-                      style={{ background: isPairDisabled ? C.s2 + "55" : C.s2 }}>
-                      <span className="text-sm font-mono font-bold" style={{ color: isPairDisabled ? C.muted : C.text }}>{pair.replace("_", "/")}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black px-3 py-1 rounded-full"
-                          style={{
-                            background: regime === "TRENDING" ? "#00e67615" : regime === "RANGING" ? "#448aff15" : "#f5a62315",
-                            color: regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber,
-                            border: `1px solid ${regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber}44`,
-                            opacity: isPairDisabled ? 0.5 : 1,
-                          }}>{regime}</span>
-                        <button
-                          onClick={() => togglePairEnabled(pair)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-90"
-                          style={{ 
-                            background: isPairDisabled ? "#ff444420" : "#00e67620", 
-                            border: `1px solid ${isPairDisabled ? C.red : C.green}44`
-                          }}>
-                          {isPairDisabled ? (
-                            <EyeOff className="w-4 h-4" style={{ color: C.red }} />
-                          ) : (
-                            <Eye className="w-4 h-4" style={{ color: C.green }} />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {Object.entries(regimes).slice(0, 8).map(([pair, regime]: [string, any]) => (
+                  <div key={pair} className="flex items-center justify-between py-2 px-3 rounded-xl"
+                    style={{ background: C.s2 }}>
+                    <span className="text-sm font-mono font-bold" style={{ color: C.text }}>{pair.replace("_", "/")}</span>
+                    <span className="text-xs font-black px-3 py-1 rounded-full"
+                      style={{
+                        background: regime === "TRENDING" ? "#00e67615" : regime === "RANGING" ? "#448aff15" : "#f5a62315",
+                        color: regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber,
+                        border: `1px solid ${regime === "TRENDING" ? C.green : regime === "RANGING" ? C.blue : C.amber}44`,
+                      }}>{regime}</span>
+                  </div>
+                ))}
                 {Object.keys(regimes).length === 0 && (
                   <p className="text-sm text-center py-4" style={{ color: C.muted }}>Scanning pairs...</p>
                 )}
