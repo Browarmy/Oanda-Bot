@@ -1,7 +1,4 @@
-/**
- * Autonomous Trading Engine v4 — QUALITY OVER QUANTITY
- *
- * Root cause of 22% win rate:
+  of 22% win rate:
  * 1. Bot was placing 500,000 unit positions (max size) — huge losses per SL hit
  * 2. Signal logic had no real trend filter — was trading against trend
  * 3. SL was too tight (1x ATR) causing noise-outs before TP
