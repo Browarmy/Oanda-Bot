@@ -895,7 +895,7 @@ export class AutonomousEngine extends EventEmitter {
       // Fetch candles — use M15 cache (30s TTL) to avoid hammering OANDA
       const cached = this.m15Cache.get(pairStat.instrument);
       const now = Date.now();
-      const [m5, m15, h1, d1] = await Promise.all([
+      const [m5, m15, h1, d1, h4] = await Promise.all([
         this.api.getCandles(pairStat.instrument, "M5", 50),
         (cached && now - cached.fetchedAt < 30_000)
           ? Promise.resolve(cached.candles)
