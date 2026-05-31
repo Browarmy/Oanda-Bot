@@ -179,7 +179,7 @@ const SCAN_INTERVAL_MS = 60_000;   // scan every 60s (was 30s) — less noise
 const MAX_LOG_LINES = 200;
 const EQUITY_CURVE_MAX = 500;
 const CLOSED_TRADE_BACKFILL_EVERY = 3;
-const PAIR_TRADE_COOLDOWN_MS = 5 * 60 * 1000; // 5 min cooldown per pair
+const PAIR_TRADE_COOLDOWN_MS = 15 * 60 * 1000; // 5 min cooldown per pair
 
 // Conservative defaults — quality over quantity
 const DEFAULT_CONFIG: BotConfig = {
