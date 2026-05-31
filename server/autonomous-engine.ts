@@ -986,6 +986,25 @@ export class AutonomousEngine extends EventEmitter {
         return;
       }
 
+      // ── H4 EMA50 TREND FILTER ──────────────────────────────────────────────
+      if (h4.length >= 50) {
+        const h4closes = h4.map(c => c.close);
+        const h4ema50arr = ema(h4closes, 50);
+        const h4ema50 = h4ema50arr[h4ema50arr.length - 1];
+        const h4lastClose = h4closes[h4closes.length - 1];
+        if (finalAction === "BUY" && h4lastClose < h4ema50) {
+          this.log(`🚫 H4 FILTER: ${pairStat.instrument} BUY blocked — counter-trend`);
+          return;
+        }
+        if (finalAction === "SELL" && h4lastClose > h4ema50) {
+          this.log(`🚫 H4 FILTER: ${pairStat.instrument} SELL blocked — counter-trend`);
+          return;
+        }
+        this.log(`✅ H4 aligned: ${pairStat.instrument} ${finalAction} (EMA50: ${h4ema50.toFixed(5)})`);
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
+
       // ── Correlation guard ─────────────────────────────────────────────────────
       const corrCheck = checkCorrelationConflict(
         pairStat.instrument, finalAction,
