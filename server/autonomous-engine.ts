@@ -902,7 +902,9 @@ export class AutonomousEngine extends EventEmitter {
           : this.api.getCandles(pairStat.instrument, "M15", 80),
         this.api.getCandles(pairStat.instrument, "H1", 40),
         this.api.getCandles(pairStat.instrument, "D", 25).catch(() => [] as Candle[]),
+        this.api.getCandles(pairStat.instrument, "H4", 60).catch(() => [] as Candle[]),
       ]);
+
       this.m15Cache.set(pairStat.instrument, { candles: m15, fetchedAt: now });
 
       // ── Regime detection ──────────────────────────────────────────────────────
