@@ -1,7 +1,4 @@
-/**
- * Autonomous Trading Engine v4 — QUALITY OVER QUANTITY
- *
- * Root cause of 22% win rate:
+  of 22% win rate:
  * 1. Bot was placing 500,000 unit positions (max size) — huge losses per SL hit
  * 2. Signal logic had no real trend filter — was trading against trend
  * 3. SL was too tight (1x ATR) causing noise-outs before TP
@@ -182,7 +179,7 @@ const SCAN_INTERVAL_MS = 60_000;   // scan every 60s (was 30s) — less noise
 const MAX_LOG_LINES = 200;
 const EQUITY_CURVE_MAX = 500;
 const CLOSED_TRADE_BACKFILL_EVERY = 3;
-const PAIR_TRADE_COOLDOWN_MS = 5 * 60 * 1000; // 5 min cooldown per pair
+const PAIR_TRADE_COOLDOWN_MS = 15 * 60 * 1000; // 5 min cooldown per pair
 
 // Conservative defaults — quality over quantity
 const DEFAULT_CONFIG: BotConfig = {
@@ -898,14 +895,16 @@ export class AutonomousEngine extends EventEmitter {
       // Fetch candles — use M15 cache (30s TTL) to avoid hammering OANDA
       const cached = this.m15Cache.get(pairStat.instrument);
       const now = Date.now();
-      const [m5, m15, h1, d1] = await Promise.all([
+      const [m5, m15, h1, d1, h4] = await Promise.all([
         this.api.getCandles(pairStat.instrument, "M5", 50),
         (cached && now - cached.fetchedAt < 30_000)
           ? Promise.resolve(cached.candles)
           : this.api.getCandles(pairStat.instrument, "M15", 80),
         this.api.getCandles(pairStat.instrument, "H1", 40),
         this.api.getCandles(pairStat.instrument, "D", 25).catch(() => [] as Candle[]),
+        this.api.getCandles(pairStat.instrument, "H4", 60).catch(() => [] as Candle[]),
       ]);
+
       this.m15Cache.set(pairStat.instrument, { candles: m15, fetchedAt: now });
 
       // ── Regime detection ──────────────────────────────────────────────────────
@@ -986,6 +985,25 @@ export class AutonomousEngine extends EventEmitter {
         this.log(`🔍 ${pairStat.instrument} [${regime.regime}] — ${finalReason}`);
         return;
       }
+
+      // ── H4 EMA50 TREND FILTER ──────────────────────────────────────────────
+      if (h4.length >= 50) {
+        const h4closes = h4.map(c => c.close);
+        const h4ema50arr = ema(h4closes, 50);
+        const h4ema50 = h4ema50arr[h4ema50arr.length - 1];
+        const h4lastClose = h4closes[h4closes.length - 1];
+        if (finalAction === "BUY" && h4lastClose < h4ema50) {
+          this.log(`🚫 H4 FILTER: ${pairStat.instrument} BUY blocked — counter-trend`);
+          return;
+        }
+        if (finalAction === "SELL" && h4lastClose > h4ema50) {
+          this.log(`🚫 H4 FILTER: ${pairStat.instrument} SELL blocked — counter-trend`);
+          return;
+        }
+        this.log(`✅ H4 aligned: ${pairStat.instrument} ${finalAction} (EMA50: ${h4ema50.toFixed(5)})`);
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
 
       // ── Correlation guard ─────────────────────────────────────────────────────
       const corrCheck = checkCorrelationConflict(
