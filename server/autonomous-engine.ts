@@ -731,6 +731,13 @@ export class AutonomousEngine extends EventEmitter {
       let added = 0;
       for (const t of closedTrades) {
         if (this.recordedClosedIds.has(t.id)) continue;
+const cutoff = process.env.STATS_CUTOFF_DATE
+  ? new Date(process.env.STATS_CUTOFF_DATE).getTime() : 0;
+if (cutoff > 0) {
+  const closedAt = t.closeTime
+    ? new Date(t.closeTime).getTime() : 0;
+  if (closedAt < cutoff) continue;
+}
         this.recordedClosedIds.add(t.id);
         const pnl = parseFloat(t.realizedPL ?? "0");
         const entryPrice = parseFloat(t.price ?? "0");
