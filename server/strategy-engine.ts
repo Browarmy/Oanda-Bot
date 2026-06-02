@@ -480,7 +480,7 @@ export function meanReversionSignal(m15: Candle[], h1: Candle[]): StrategySignal
     const conf = 0.55 + (buyCount - 3) * 0.1 + (rsi < 25 ? 0.1 : 0);
     return { action: "BUY", strategy: "MEAN_REVERT", confidence: Math.min(conf, 0.85),
       reason: `MEAN-REV BUY ${buyCount}/4 | RSI:${rsi.toFixed(0)} BB:${bbPos.toFixed(2)} MACD:${macdTurningUp ? "↑" : "→"}`,
-      slMultiplier: 0.8, tpMultiplier: 1.5, rsi, atr, ema9: lastE9, ema21: lastE21, macd, bbPosition: bbPos, signalsAgreeing: buyCount };
+slMultiplier: 1.2, tpMultiplier: 2.4, rsi, atr, ema9: lastE9, ema21: lastE21, macd, bbPosition: bbPos, signalsAgreeing: buyCount
   }
   if (sellCount >= 3) {
     const conf = 0.55 + (sellCount - 3) * 0.1 + (rsi > 75 ? 0.1 : 0);
