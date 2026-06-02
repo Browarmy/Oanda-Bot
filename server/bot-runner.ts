@@ -22,7 +22,9 @@ if (!token || !accountId) {
 
 console.log("🤖 OANDA v3 Autonomous Bot Worker starting...");
 console.log(`   Environment : ${environment.toUpperCase()}`);
-console.log(`   Account ID  : ${accountId}`);
+console.log(
+  `Account ID: ****${accountId.slice(-4)}`
+);
 console.log("OANDA token loaded");
 
 async function main() {
