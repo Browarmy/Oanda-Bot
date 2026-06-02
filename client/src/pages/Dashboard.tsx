@@ -160,6 +160,28 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const winRate = totalTrades > 0 ? Math.round(((s?.totalWins ?? 0) / totalTrades) * 100) : 0;
   const pf = (s?.totalLosses ?? 0) > 0 ? ((s?.totalWins ?? 0) / (s?.totalLosses ?? 1)).toFixed(2) : "—";
   const openTrades = s?.openTrades ?? [];
+// ─── Performance metrics ──────────────────────────────────────
+const tradeHist = history ?? [];
+const wonTrades = tradeHist.filter((t: any) => t.won);
+const lostTrades = tradeHist.filter((t: any) => !t.won);
+const avgWin = wonTrades.length > 0
+  ? wonTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / wonTrades.length : 0;
+const avgLoss = lostTrades.length > 0
+  ? Math.abs(lostTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / lostTrades.length) : 0;
+const rr = avgLoss > 0 ? avgWin / avgLoss : 0;
+const expectancy = totalTrades > 0
+  ? ((winRate / 100) * avgWin) - ((1 - winRate / 100) * avgLoss) : 0;
+const equityPeak = Math.max(
+  ...(s?.equityCurve ?? []).map((e: any) => e.equity),
+  balance > 0 ? balance : 0
+);
+const maxDrawdownPct = equityPeak > 0
+  ? ((equityPeak - equity) / equityPeak) * 100 : 0;
+const bestTrade = tradeHist.length > 0
+  ? tradeHist.reduce((b: any, t: any) => t.pnl > (b?.pnl ?? -Infinity) ? t : b, null) : null;
+const worstTrade = tradeHist.length > 0
+  ? tradeHist.reduce((w: any, t: any) => t.pnl < (w?.pnl ?? Infinity) ? t : w, null) : null;
+// ─────────────────────────────────────────────────────────────
   const isLive = s?.isLive ?? false;
   const isPaused = s?.isPaused ?? false;
   const equityCurve = s?.equityCurve ?? [];
