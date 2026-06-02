@@ -160,6 +160,28 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const winRate = totalTrades > 0 ? Math.round(((s?.totalWins ?? 0) / totalTrades) * 100) : 0;
   const pf = (s?.totalLosses ?? 0) > 0 ? ((s?.totalWins ?? 0) / (s?.totalLosses ?? 1)).toFixed(2) : "—";
   const openTrades = s?.openTrades ?? [];
+// ─── Performance metrics ──────────────────────────────────────
+const tradeHist = history ?? [];
+const wonTrades = tradeHist.filter((t: any) => t.won);
+const lostTrades = tradeHist.filter((t: any) => !t.won);
+const avgWin = wonTrades.length > 0
+  ? wonTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / wonTrades.length : 0;
+const avgLoss = lostTrades.length > 0
+  ? Math.abs(lostTrades.reduce((sum: number, t: any) => sum + t.pnl, 0) / lostTrades.length) : 0;
+const rr = avgLoss > 0 ? avgWin / avgLoss : 0;
+const expectancy = totalTrades > 0
+  ? ((winRate / 100) * avgWin) - ((1 - winRate / 100) * avgLoss) : 0;
+const equityPeak = Math.max(
+  ...(s?.equityCurve ?? []).map((e: any) => e.equity),
+  balance > 0 ? balance : 0
+);
+const maxDrawdownPct = equityPeak > 0
+  ? ((equityPeak - equity) / equityPeak) * 100 : 0;
+const bestTrade = tradeHist.length > 0
+  ? tradeHist.reduce((b: any, t: any) => t.pnl > (b?.pnl ?? -Infinity) ? t : b, null) : null;
+const worstTrade = tradeHist.length > 0
+  ? tradeHist.reduce((w: any, t: any) => t.pnl < (w?.pnl ?? Infinity) ? t : w, null) : null;
+// ─────────────────────────────────────────────────────────────
   const isLive = s?.isLive ?? false;
   const isPaused = s?.isPaused ?? false;
   const equityCurve = s?.equityCurve ?? [];
@@ -318,12 +340,20 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
               <StatPill label="Profit Factor" value={pf.toString()}
                 color={parseFloat(pf) >= 1.5 ? C.green : parseFloat(pf) >= 1 ? C.amber : C.red}
                 sub={`${totalTrades} trades`} />
-              <StatPill label="Open Trades" value={String(openTrades.length)}
+                          <StatPill label="Open Trades" value={String(openTrades.length)}
                 color={openTrades.length > 0 ? C.blue : C.muted}
                 sub={`Heat: ${(portfolioHeat * 100).toFixed(1)}%`} />
               <StatPill label="Equity" value={`${currency} ${equity.toFixed(0)}`}
                 color={equity >= balance ? C.green : C.red}
                 sub={equity >= balance ? "Profitable" : "In drawdown"} />
+              <StatPill label="Expectancy"
+                value={expectancy !== 0 ? `${expectancy >= 0 ? "+" : ""}£${expectancy.toFixed(2)}` : "—"}
+                color={expectancy > 0 ? C.green : expectancy < 0 ? C.red : C.amber}
+                sub="per trade avg" />
+              <StatPill label="Max Drawdown"
+                value={`${maxDrawdownPct.toFixed(2)}%`}
+                color={maxDrawdownPct < 3 ? C.green : maxDrawdownPct < 5 ? C.amber : C.red}
+                sub="from peak equity" />
             </div>
 
             {/* Equity curve */}
@@ -495,7 +525,26 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
               <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
               <StatPill label="Profit Factor" value={pf.toString()} color={parseFloat(pf) >= 1.5 ? C.green : C.amber} />
               <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} sub={currency} />
+              <StatPill label="Avg Win" value={avgWin > 0 ? `+£${avgWin.toFixed(2)}` : "—"} color={C.green} />
+              <StatPill label="Avg Loss" value={avgLoss > 0 ? `-£${avgLoss.toFixed(2)}` : "—"} color={C.red} />
+              <StatPill label="R:R Ratio" value={rr > 0 ? `${rr.toFixed(2)}:1` : "—"} color={rr >= 2 ? C.green : rr >= 1.5 ? C.amber : C.red} />
+              <StatPill label="Expectancy" value={expectancy !== 0 ? `£${expectancy.toFixed(2)}` : "—"} color={expectancy >= 0 ? C.green : C.red} sub="per trade" />
             </div>
+
+            {bestTrade && worstTrade && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.green}33` }}>
+                  <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Best Trade</p>
+                  <p className="text-lg font-black font-mono" style={{ color: C.green }}>+£{bestTrade.pnl.toFixed(2)}</p>
+                  <p className="text-xs font-mono mt-1" style={{ color: C.muted }}>{bestTrade.instrument?.replace("_", "/")} · +{bestTrade.pips?.toFixed(1)}p</p>
+                </div>
+                <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.red}33` }}>
+                  <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Worst Trade</p>
+                  <p className="text-lg font-black font-mono" style={{ color: C.red }}>£{worstTrade.pnl.toFixed(2)}</p>
+                  <p className="text-xs font-mono mt-1" style={{ color: C.muted }}>{worstTrade.instrument?.replace("_", "/")} · {worstTrade.pips?.toFixed(1)}p</p>
+                </div>
+              </div>
+            )}
 
             {/* Backtest link */}
             <button onClick={() => setTab("backtest")}
@@ -668,6 +717,22 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
                 <SectionTitle>🔬 Learned Parameters (v{learning.totalEvolutions})</SectionTitle>
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(learning.params ?? {}).filter(([k]) => k !== "version").map(([k, v]) => (
+                <div className="rounded-2xl p-4 mt-3" style={{ background: C.s2, border: `1px solid ${C.border}` }}>
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Evolution Progress</p>
+                    <span className="text-xs font-black" style={{ color: C.amber }}>
+                      {Math.max(0, 30 - (totalTrades % 30))} trades to V{(learning.totalEvolutions ?? 0) + 1}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden mb-2" style={{ background: "#0d1526" }}>
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((totalTrades % 30) / 30) * 100)}%`, background: C.amber }} />
+                  </div>
+                  <p className="text-xs" style={{ color: C.muted }}>
+                    {totalTrades} trades analysed · Version {learning.totalEvolutions ?? 0} active
+                  </p>
+                </div>
+
                     <div key={k} className="rounded-xl p-3" style={{ background: C.s2 }}>
                       <p className="text-xs mb-1" style={{ color: C.muted }}>{k}</p>
                       <p className="text-sm font-black font-mono" style={{ color: C.blue }}>
