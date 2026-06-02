@@ -481,12 +481,14 @@ export function meanReversionSignal(m15: Candle[], h1: Candle[]): StrategySignal
     return { action: "BUY", strategy: "MEAN_REVERT", confidence: Math.min(conf, 0.85),
       reason: `MEAN-REV BUY ${buyCount}/4 | RSI:${rsi.toFixed(0)} BB:${bbPos.toFixed(2)} MACD:${macdTurningUp ? "↑" : "→"}`,
 slMultiplier: 1.2, tpMultiplier: 2.4, rsi, atr, ema9: lastE9, ema21: lastE21, macd, bbPosition: bbPos, signalsAgreeing: buyCount
+    };
   }
   if (sellCount >= 3) {
     const conf = 0.55 + (sellCount - 3) * 0.1 + (rsi > 75 ? 0.1 : 0);
     return { action: "SELL", strategy: "MEAN_REVERT", confidence: Math.min(conf, 0.85),
       reason: `MEAN-REV SELL ${sellCount}/4 | RSI:${rsi.toFixed(0)} BB:${bbPos.toFixed(2)} MACD:${macdTurningDown ? "↓" : "→"}`,
-slMultiplier: 1.2, tpMultiplier: 2.4, rsi, atr, ema9: lastE9, ema21: lastE21, macd, bbPosition: bbPos, signalsAgreeing: buyCount
+slMultiplier: 1.2, tpMultiplier: 2.4, rsi, atr, ema9: lastE9, ema21: lastE21, macd, bbPosition: bbPos, signalsAgreeing: sellCount 
+    };
   }
 
   return empty;
