@@ -435,7 +435,7 @@ export function trendFollowSignal(
 export function meanReversionSignal(m15: Candle[], h1: Candle[]): StrategySignal {
   const empty: StrategySignal = {
     action: "WAIT", strategy: "MEAN_REVERT", confidence: 0, reason: "No mean-reversion signal",
-    slMultiplier: 0.8, tpMultiplier: 1.5, rsi: 50, atr: 0, ema9: 0, ema21: 0, macd: 0, bbPosition: 0.5, signalsAgreeing: 0,
+    slMultiplier: 1.2, tpMultiplier: 2.4, rsi: 50, atr: 0, ema9: 0, ema21: 0, macd: 0, bbPosition: 0.5, signalsAgreeing: 0,
   };
   if (m15.length < 25) return empty;
 
