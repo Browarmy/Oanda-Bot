@@ -712,37 +712,77 @@ const worstTrade = tradeHist.length > 0
               </div>
             )}
 
-            {learning && (
-              <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
-                <SectionTitle>🔬 Learned Parameters (v{learning.totalEvolutions})</SectionTitle>
-                <div className="grid grid-cols-3 gap-2">
-                  {Object.entries(learning.params ?? {}).filter(([k]) => k !== "version").map(([k, v]) => (
-                <div className="rounded-2xl p-4 mt-3" style={{ background: C.s2, border: `1px solid ${C.border}` }}>
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Evolution Progress</p>
-                    <span className="text-xs font-black" style={{ color: C.amber }}>
-                      {Math.max(0, 30 - (totalTrades % 30))} trades to V{(learning.totalEvolutions ?? 0) + 1}
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full overflow-hidden mb-2" style={{ background: "#0d1526" }}>
-                    <div className="h-full rounded-full transition-all"
-                      style={{ width: `${Math.min(100, ((totalTrades % 30) / 30) * 100)}%`, background: C.amber }} />
-                  </div>
-                  <p className="text-xs" style={{ color: C.muted }}>
-                    {totalTrades} trades analysed · Version {learning.totalEvolutions ?? 0} active
-                  </p>
-                </div>
+{learning && (
+  <div
+    className="rounded-3xl p-4"
+    style={{ background: C.s1, border: `1px solid ${C.border}` }}
+  >
+    <SectionTitle>
+      🔬 Learned Parameters (v{learning.totalEvolutions})
+    </SectionTitle>
 
-                    <div key={k} className="rounded-xl p-3" style={{ background: C.s2 }}>
-                      <p className="text-xs mb-1" style={{ color: C.muted }}>{k}</p>
-                      <p className="text-sm font-black font-mono" style={{ color: C.blue }}>
-                        {typeof v === "number" ? v.toFixed(3) : String(v)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+    <div
+      className="rounded-2xl p-4 mt-3"
+      style={{ background: C.s2, border: `1px solid ${C.border}` }}
+    >
+      <div className="flex justify-between items-center mb-2">
+        <p
+          className="text-xs font-bold tracking-widest uppercase"
+          style={{ color: C.muted }}
+        >
+          Evolution Progress
+        </p>
+        <span className="text-xs font-black" style={{ color: C.amber }}>
+          {Math.max(0, 30 - (totalTrades % 30))} trades to V
+          {(learning.totalEvolutions ?? 0) + 1}
+        </span>
+      </div>
+
+      <div
+        className="h-2 rounded-full overflow-hidden mb-2"
+        style={{ background: "#0d1526" }}
+      >
+        <div
+          className="h-full rounded-full transition-all"
+          style={{
+            width: `${Math.min(
+              100,
+              ((totalTrades % 30) / 30) * 100
+            )}%`,
+            background: C.amber,
+          }}
+        />
+      </div>
+
+      <p className="text-xs" style={{ color: C.muted }}>
+        {totalTrades} trades analysed · Version{" "}
+        {learning.totalEvolutions ?? 0} active
+      </p>
+    </div>
+
+    <div className="grid grid-cols-3 gap-2 mt-3">
+      {Object.entries(learning.params ?? {})
+        .filter(([k]) => k !== "version")
+        .map(([k, v]) => (
+          <div
+            key={k}
+            className="rounded-xl p-3"
+            style={{ background: C.s2 }}
+          >
+            <p className="text-xs mb-1" style={{ color: C.muted }}>
+              {k}
+            </p>
+            <p
+              className="text-sm font-black font-mono"
+              style={{ color: C.blue }}
+            >
+              {typeof v === "number" ? v.toFixed(3) : String(v)}
+            </p>
+          </div>
+        ))}
+    </div>
+  </div>
+)}
 
             {learning && Object.keys(learning.pairs ?? {}).length > 0 && (
               <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
