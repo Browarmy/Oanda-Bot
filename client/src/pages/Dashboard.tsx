@@ -525,7 +525,26 @@ const worstTrade = tradeHist.length > 0
               <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
               <StatPill label="Profit Factor" value={pf.toString()} color={parseFloat(pf) >= 1.5 ? C.green : C.amber} />
               <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} sub={currency} />
+              <StatPill label="Avg Win" value={avgWin > 0 ? `+£${avgWin.toFixed(2)}` : "—"} color={C.green} />
+              <StatPill label="Avg Loss" value={avgLoss > 0 ? `-£${avgLoss.toFixed(2)}` : "—"} color={C.red} />
+              <StatPill label="R:R Ratio" value={rr > 0 ? `${rr.toFixed(2)}:1` : "—"} color={rr >= 2 ? C.green : rr >= 1.5 ? C.amber : C.red} />
+              <StatPill label="Expectancy" value={expectancy !== 0 ? `£${expectancy.toFixed(2)}` : "—"} color={expectancy >= 0 ? C.green : C.red} sub="per trade" />
             </div>
+
+            {bestTrade && worstTrade && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.green}33` }}>
+                  <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Best Trade</p>
+                  <p className="text-lg font-black font-mono" style={{ color: C.green }}>+£{bestTrade.pnl.toFixed(2)}</p>
+                  <p className="text-xs font-mono mt-1" style={{ color: C.muted }}>{bestTrade.instrument?.replace("_", "/")} · +{bestTrade.pips?.toFixed(1)}p</p>
+                </div>
+                <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.red}33` }}>
+                  <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Worst Trade</p>
+                  <p className="text-lg font-black font-mono" style={{ color: C.red }}>£{worstTrade.pnl.toFixed(2)}</p>
+                  <p className="text-xs font-mono mt-1" style={{ color: C.muted }}>{worstTrade.instrument?.replace("_", "/")} · {worstTrade.pips?.toFixed(1)}p</p>
+                </div>
+              </div>
+            )}
 
             {/* Backtest link */}
             <button onClick={() => setTab("backtest")}
