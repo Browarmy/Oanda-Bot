@@ -340,12 +340,20 @@ const worstTrade = tradeHist.length > 0
               <StatPill label="Profit Factor" value={pf.toString()}
                 color={parseFloat(pf) >= 1.5 ? C.green : parseFloat(pf) >= 1 ? C.amber : C.red}
                 sub={`${totalTrades} trades`} />
-              <StatPill label="Open Trades" value={String(openTrades.length)}
+                          <StatPill label="Open Trades" value={String(openTrades.length)}
                 color={openTrades.length > 0 ? C.blue : C.muted}
                 sub={`Heat: ${(portfolioHeat * 100).toFixed(1)}%`} />
               <StatPill label="Equity" value={`${currency} ${equity.toFixed(0)}`}
                 color={equity >= balance ? C.green : C.red}
                 sub={equity >= balance ? "Profitable" : "In drawdown"} />
+              <StatPill label="Expectancy"
+                value={expectancy !== 0 ? `${expectancy >= 0 ? "+" : ""}£${expectancy.toFixed(2)}` : "—"}
+                color={expectancy > 0 ? C.green : expectancy < 0 ? C.red : C.amber}
+                sub="per trade avg" />
+              <StatPill label="Max Drawdown"
+                value={`${maxDrawdownPct.toFixed(2)}%`}
+                color={maxDrawdownPct < 3 ? C.green : maxDrawdownPct < 5 ? C.amber : C.red}
+                sub="from peak equity" />
             </div>
 
             {/* Equity curve */}
