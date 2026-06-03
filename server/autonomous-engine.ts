@@ -852,8 +852,8 @@ if (cutoff > 0) {
         p.enabled && this.state.config.enabledPairs.includes(p.instrument)
       );
 
-      for (const pairStat of enabledPairs) {
-        if (openTrades.length >= this.state.config.maxConcurrentTrades) break;
+  for (const pairStat of enabledPairs) {
+        if (this.state.openTradesCount >= this.state.config.maxConcurrentTrades) break;
         if (pairStat.openTrades.length > 0) continue;
         // Cooldown: don't trade same pair within 5 minutes
         if (Date.now() - pairStat.lastTrade < PAIR_TRADE_COOLDOWN_MS) continue;
@@ -1217,6 +1217,7 @@ if (cutoff > 0) {
       const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
       pairStat.lastTrade = Date.now();
       this.state.totalTrades++;
+      this.state.openTradesCount++;
       this.tradesSinceWalkForward++;
       this.openTradeSnapshots.set(tradeId, {
         id: tradeId, instrument: pairStat.instrument, direction: finalAction,
