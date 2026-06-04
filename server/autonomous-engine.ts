@@ -680,9 +680,26 @@ export class AutonomousEngine extends EventEmitter {
       this.log(`WARNING: Could not fetch account: ${e.message}`);
     }
     try {
-      const openTrades = await this.api.getOpenTrades();
-      this.previousOpenTradeIds = new Set(openTrades.map(t => t.id));
-      this.log(`📋 Bootstrapped ${openTrades.length} open trade IDs`);
+  const openTrades = await this.api.getOpenTrades();
+  this.previousOpenTradeIds = new Set(openTrades.map(t => t.id));
+  // Bootstrap snapshots so trailing stop works on existing trades
+  for (const t of openTrades) {
+    if (!this.openTradeSnapshots.has(t.id)) {
+      this.openTradeSnapshots.set(t.id, {
+        id: t.id,
+        instrument: t.instrument,
+        direction: t.direction,
+        units: t.units,
+        entryPrice: t.entryPrice,
+        stopLoss: t.stopLoss,
+        takeProfit: t.takeProfit,
+        openTime: t.openTime,
+        unrealisedPnl: t.unrealisedPnl,
+      });
+    }
+  }
+  this.log(`📋 Bootstrapped ${openTrades.length} open trade IDs + snapshots`);
+
     } catch (e: any) {
       this.log(`WARNING: Bootstrap failed: ${e.message}`);
     }
