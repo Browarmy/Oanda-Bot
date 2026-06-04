@@ -668,6 +668,7 @@ init(token: string, accountId: string, environment: "practice" | "live") {
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
 
+        // === ACCOUNT REFRESH + EQUITY PROTECTION ===
     try {
       const acct = await this.api.getAccount();
       this.state.accountBalance = acct.balance;
@@ -676,9 +677,10 @@ init(token: string, accountId: string, environment: "practice" | "live") {
       this.state.equityCurve.push({ time: Date.now(), equity: acct.equity });
       this.dailyStartBalance = acct.balance;
       this.dailyStartDate = new Date().toDateString();
+
       this.log(`Account: ${acct.currency} ${acct.balance.toFixed(2)} | Equity: ${acct.equity.toFixed(2)}`);
 
-      // === EQUITY CURVE PROTECTION (Phase 0) ===
+      // === EQUITY CURVE PROTECTION (Phase 0 Safety) ===
       const peakEquity = this.state.equityCurve?.length 
         ? Math.max(...this.state.equityCurve.map((e: any) => e.equity))
         : this.state.accountEquity;
@@ -699,6 +701,7 @@ init(token: string, accountId: string, environment: "practice" | "live") {
       this.log(`WARNING: Could not fetch account: ${e.message}`);
     }
 
+    // === TRADE RECONCILIATION ===
     try {
       const openTrades = await this.api.getOpenTrades();
       this.previousOpenTradeIds = new Set(openTrades.map(t => t.id));
@@ -723,16 +726,17 @@ init(token: string, accountId: string, environment: "practice" | "live") {
     } catch (e: any) {
       this.log(`⚠️ Reconciliation warning: ${e.message}`);
     }
-      } catch (e: any) {
-      this.log(`WARNING: Bootstrap failed: ${e.message}`);
-    }
+
     await this.backfillClosedTrades();
     this.scanTimer = setInterval(() => this.scanAllPairs(), SCAN_INTERVAL_MS);
     this.scanAllPairs();
   }
 
   stop() {
-    if (this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; }
+    if (this.scanTimer) { 
+      clearInterval(this.scanTimer); 
+      this.scanTimer = null; 
+    }
     this.state.isLive = false;
     this.state.isPaused = false;
     learningEngine.save();
