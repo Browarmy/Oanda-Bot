@@ -21,6 +21,7 @@
  */
 import { EventEmitter } from "events";
 import { ENV } from "./_core/env";
+import { RobustOandaAPI } from "./robust-oanda-client";
 import { learningEngine } from "./learning-engine";
 import { notifyTradeOpen, notifyTradeClose, notifyDailyLossGuard, notifyBotStatus, notifyPropFirmAlert } from "./telegram-notifier";
 import {
