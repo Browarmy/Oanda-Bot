@@ -1346,8 +1346,10 @@ if (cutoff > 0) {
     }
   }
 
-  // Track which trades have had partial TP taken (50% close at 1.5R)
+    // Track which trades have had partial TP taken (50% close at 1.5R)
   private partialTpTaken = new Set<string>();
+  // Track which trades have had SL moved to breakeven (1R)
+  private breakevenSet = new Set<string>();
 
   private async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
@@ -1362,15 +1364,48 @@ if (cutoff > 0) {
         const isIndex = ["UK100","US30","SPX","NAS","DE30","JP225","AU200"].some(x => trade.instrument.includes(x));
         const isGold = trade.instrument.includes("XAU");
         const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
+
         const slDist = Math.abs(snap.entryPrice - snap.stopLoss);
+        if (slDist === 0) continue;
+
         const profitDist = trade.direction === "BUY"
           ? currentPrice - snap.entryPrice
           : snap.entryPrice - currentPrice;
 
-        // ── PARTIAL TAKE-PROFIT at 1.5R ──────────────────────────────────────────
-        // Close 50% of position when price reaches 1.5x the stop distance
-        // This locks in profit and lets the rest run to full TP (3R)
-        if (!this.partialTpTaken.has(trade.id) && profitDist >= slDist * 1.5 && trade.units >= 2000) {
+        const R = profitDist / slDist;
+
+        // Use cached M15 candles for live ATR — no extra API calls
+        const cached = this.m15Cache.get(trade.instrument);
+        let currentAtr = slDist; // fallback to entry SL if no candles
+        if (cached && cached.candles.length >= 15) {
+          const atrCalc = calcAtr(cached.candles, 14);
+          if (atrCalc > 0) currentAtr = atrCalc;
+        }
+
+        const minMove = isJpy ? 0.005 : 0.00003;
+
+        // ── STAGE 1: Breakeven at 1R ────────────────────────────────────────────
+        if (R >= 1.0 && !this.breakevenSet.has(trade.id)) {
+          const buffer = slDist * 0.05;
+          const beSl = trade.direction === "BUY"
+            ? snap.entryPrice + buffer
+            : snap.entryPrice - buffer;
+          const isImprovement = trade.direction === "BUY"
+            ? beSl > snap.stopLoss + minMove
+            : beSl < snap.stopLoss - minMove;
+          if (isImprovement) {
+            await this.api.request(
+              `/v3/accounts/${this.api.getAccountId()}/trades/${trade.id}/orders`,
+              { method: "PUT", body: JSON.stringify({ stopLoss: { price: beSl.toFixed(dp), timeInForce: "GTC" } }) }
+            );
+            snap.stopLoss = beSl;
+            this.log(`🔒 BREAKEVEN: ${trade.instrument} SL → ${beSl.toFixed(dp)} (1R hit — zero risk now)`);
+          }
+          this.breakevenSet.add(trade.id);
+        }
+
+        // ── STAGE 2: Partial TP at 1.5R ─────────────────────────────────────────
+        if (!this.partialTpTaken.has(trade.id) && R >= 1.5 && trade.units >= 200) {
           const halfUnits = Math.floor(trade.units / 2);
           const closeUnits = trade.direction === "BUY" ? -halfUnits : halfUnits;
           try {
@@ -1379,18 +1414,47 @@ if (cutoff > 0) {
               { method: "PUT", body: JSON.stringify({ units: String(closeUnits) }) }
             );
             this.partialTpTaken.add(trade.id);
-            this.log(`💰 Partial TP ${trade.instrument}: closed ${halfUnits.toLocaleString()} units at 1.5R profit — letting rest run to full TP`);
-            // Move SL to breakeven after partial close
-            const bePrice = snap.entryPrice;
-            const beSl = trade.direction === "BUY" ? bePrice + (slDist * 0.05) : bePrice - (slDist * 0.05);
+            this.log(`💰 PARTIAL TP: ${trade.instrument} — ${halfUnits.toLocaleString()} units closed at 1.5R`);
+            // Lock in +0.5R on remaining position
+            const lockSl = trade.direction === "BUY"
+              ? snap.entryPrice + slDist * 0.5
+              : snap.entryPrice - slDist * 0.5;
             await this.api.request(
               `/v3/accounts/${this.api.getAccountId()}/trades/${trade.id}/orders`,
-              { method: "PUT", body: JSON.stringify({ stopLoss: { price: beSl.toFixed(dp), timeInForce: "GTC" } }) }
+              { method: "PUT", body: JSON.stringify({ stopLoss: { price: lockSl.toFixed(dp), timeInForce: "GTC" } }) }
             );
-            snap.stopLoss = beSl;
-            this.log(`🔒 ${trade.instrument}: SL moved to breakeven ${beSl.toFixed(dp)} after partial TP`);
-          } catch { /* non-critical — partial close may fail if units too small */ }
+            snap.stopLoss = lockSl;
+            this.log(`🔒 PROFIT LOCK: ${trade.instrument} SL → ${lockSl.toFixed(dp)} (+0.5R secured)`);
+          } catch { /* non-critical */ }
         }
+
+        // ── STAGE 3 & 4: Dynamic trailing at 2R+ ────────────────────────────────
+        if (!this.state.config.trailingStopEnabled) continue;
+        if (R < 2.0) continue;
+
+        // Tighten trail as profit grows: 1.5×ATR at 2R, 1.0×ATR at 3R+
+        const trailMult = R >= 3.0 ? 1.0 : 1.5;
+        const newSl = trade.direction === "BUY"
+          ? currentPrice - (currentAtr * trailMult)
+          : currentPrice + (currentAtr * trailMult);
+
+        const shouldUpdate = trade.direction === "BUY"
+          ? newSl > snap.stopLoss + minMove
+          : newSl < snap.stopLoss - minMove;
+
+        if (!shouldUpdate) continue;
+
+        await this.api.request(
+          `/v3/accounts/${this.api.getAccountId()}/trades/${trade.id}/orders`,
+          { method: "PUT", body: JSON.stringify({ stopLoss: { price: newSl.toFixed(dp), timeInForce: "GTC" } }) }
+        );
+        snap.stopLoss = newSl;
+        this.log(`📈 TRAIL: ${trade.instrument} SL → ${newSl.toFixed(dp)} [R:${R.toFixed(1)} | ${trailMult}×ATR]`);
+
+      } catch { /* non-critical */ }
+    }
+  }
+
 
         // ── TRAILING STOP (only after partial TP or if partial TP not applicable) ─
         if (!this.state.config.trailingStopEnabled) continue;
