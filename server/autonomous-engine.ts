@@ -588,7 +588,7 @@ function calculateUnits(
 
 // ─── Main Engine ──────────────────────────────────────────────────────────────
 export class AutonomousEngine extends EventEmitter {
-  public api: OandaAPI | null = null;
+  public api: RobustOandaAPI | null = null;
   private state: EngineState;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private adaptiveWeights: Map<string, AdaptiveWeights> = new Map();
@@ -647,11 +647,10 @@ export class AutonomousEngine extends EventEmitter {
     }
   }
 
-  init(token: string, accountId: string, environment: "practice" | "live") {
-    this.api = new OandaAPI(token, accountId, environment);
-    this.log(`Engine v4 initialised | ${environment.toUpperCase()} | ${accountId}`);
-  }
-
+init(token: string, accountId: string, environment: "practice" | "live") {
+    this.api = new RobustOandaAPI(token, accountId, environment);
+    this.log(`Engine v4 initialised | ${environment.toUpperCase()} | ${accountId} (Robust API + Circuit Breaker)`);
+}
   async start() {
     if (!this.api) { this.log("ERROR: call init() first"); return; }
     if (this.state.isLive) return;
@@ -668,6 +667,7 @@ export class AutonomousEngine extends EventEmitter {
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
+
     try {
       const acct = await this.api.getAccount();
       this.state.accountBalance = acct.balance;
@@ -677,31 +677,53 @@ export class AutonomousEngine extends EventEmitter {
       this.dailyStartBalance = acct.balance;
       this.dailyStartDate = new Date().toDateString();
       this.log(`Account: ${acct.currency} ${acct.balance.toFixed(2)} | Equity: ${acct.equity.toFixed(2)}`);
+
+      // === EQUITY CURVE PROTECTION (Phase 0) ===
+      const peakEquity = this.state.equityCurve?.length 
+        ? Math.max(...this.state.equityCurve.map((e: any) => e.equity))
+        : this.state.accountEquity;
+      
+      const currentDd = peakEquity > 0 
+        ? ((peakEquity - this.state.accountEquity) / peakEquity) * 100 
+        : 0;
+
+      if (currentDd > 5) {
+        const oldRisk = this.state.config.riskPercent;
+        this.state.config.riskPercent = Math.max(0.3, this.state.config.riskPercent * 0.5);
+        this.log(`🛡️ Equity protection: ${currentDd.toFixed(1)}% DD — risk reduced ${oldRisk}% → ${this.state.config.riskPercent}%`);
+      } else if (currentDd < 2 && this.state.config.riskPercent < 1.0) {
+        this.state.config.riskPercent = Math.min(1.0, this.state.config.riskPercent * 1.05);
+      }
+      // =========================================
     } catch (e: any) {
       this.log(`WARNING: Could not fetch account: ${e.message}`);
     }
-    try {
-  const openTrades = await this.api.getOpenTrades();
-  this.previousOpenTradeIds = new Set(openTrades.map(t => t.id));
-  // Bootstrap snapshots so trailing stop works on existing trades
-  for (const t of openTrades) {
-    if (!this.openTradeSnapshots.has(t.id)) {
-      this.openTradeSnapshots.set(t.id, {
-        id: t.id,
-        instrument: t.instrument,
-        direction: t.direction,
-        units: t.units,
-        entryPrice: t.entryPrice,
-        stopLoss: t.stopLoss,
-        takeProfit: t.takeProfit,
-        openTime: t.openTime,
-        unrealisedPnl: t.unrealisedPnl,
-      });
-    }
-  }
-  this.log(`📋 Bootstrapped ${openTrades.length} open trade IDs + snapshots`);
 
+    try {
+      const openTrades = await this.api.getOpenTrades();
+      this.previousOpenTradeIds = new Set(openTrades.map(t => t.id));
+      
+      // Bootstrap snapshots so trailing stop works on existing trades
+      for (const t of openTrades) {
+        if (!this.openTradeSnapshots.has(t.id)) {
+          this.openTradeSnapshots.set(t.id, {
+            id: t.id,
+            instrument: t.instrument,
+            direction: t.direction,
+            units: t.units,
+            entryPrice: t.entryPrice,
+            stopLoss: t.stopLoss,
+            takeProfit: t.takeProfit,
+            openTime: t.openTime,
+            unrealisedPnl: t.unrealisedPnl,
+          });
+        }
+      }
+      this.log(`📋 Bootstrapped ${openTrades.length} open trade IDs + snapshots (via RobustOandaAPI)`);
     } catch (e: any) {
+      this.log(`⚠️ Reconciliation warning: ${e.message}`);
+    }
+      } catch (e: any) {
       this.log(`WARNING: Bootstrap failed: ${e.message}`);
     }
     await this.backfillClosedTrades();
