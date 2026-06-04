@@ -1456,24 +1456,6 @@ if (cutoff > 0) {
   }
 
 
-        // ── TRAILING STOP (only after partial TP or if partial TP not applicable) ─
-        if (!this.state.config.trailingStopEnabled) continue;
-        if (profitDist < slDist * 0.75) continue; // only trail when 75% of SL in profit
-        const trailDist = slDist * this.state.config.trailingStopAtr;
-        const newSl = trade.direction === "BUY" ? currentPrice - trailDist : currentPrice + trailDist;
-        const currentSl = trade.stopLoss;
-        const shouldUpdate = trade.direction === "BUY" ? newSl > currentSl + 0.00005 : newSl < currentSl - 0.00005;
-        if (!shouldUpdate) continue;
-        await this.api.request(
-          `/v3/accounts/${this.api.getAccountId()}/trades/${trade.id}/orders`,
-          { method: "PUT", body: JSON.stringify({ stopLoss: { price: newSl.toFixed(dp), timeInForce: "GTC" } }) }
-        );
-        snap.stopLoss = newSl;
-        this.log(`🔒 Trail SL ${trade.instrument} → ${newSl.toFixed(dp)}`);
-      } catch { /* non-critical */ }
-    }
-  }
-
   resetStats() {
     this.state.totalTrades = 0;
     this.state.totalWins = 0;
