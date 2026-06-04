@@ -733,7 +733,7 @@ const worstTrade = tradeHist.length > 0
           Evolution Progress
         </p>
         <span className="text-xs font-black" style={{ color: C.amber }}>
-          {Math.max(0, 30 - (totalTrades % 30))} trades to V
+          {Math.max(0, 20 - (totalTrades % 20))} trades to V
           {(learning.totalEvolutions ?? 0) + 1}
         </span>
       </div>
