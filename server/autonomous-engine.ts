@@ -21,7 +21,6 @@
  */
 import { EventEmitter } from "events";
 import { ENV } from "./_core/env";
-import { RobustOandaAPI } from "./robust-oanda-client";
 import { learningEngine } from "./learning-engine";
 import { notifyTradeOpen, notifyTradeClose, notifyDailyLossGuard, notifyBotStatus, notifyPropFirmAlert } from "./telegram-notifier";
 import {
@@ -588,7 +587,7 @@ function calculateUnits(
 
 // ─── Main Engine ──────────────────────────────────────────────────────────────
 export class AutonomousEngine extends EventEmitter {
-  public api: RobustOandaAPI | null = null;
+    public api: any | null = null;   // Original
   private state: EngineState;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private adaptiveWeights: Map<string, AdaptiveWeights> = new Map();
@@ -647,10 +646,11 @@ export class AutonomousEngine extends EventEmitter {
     }
   }
 
-init(token: string, accountId: string, environment: "practice" | "live") {
-    this.api = new RobustOandaAPI(token, accountId, environment);
-    this.log(`Engine v4 initialised | ${environment.toUpperCase()} | ${accountId} (Robust API + Circuit Breaker)`);
-}
+  init(token: string, accountId: string, environment: "practice" | "live") {
+    this.api = new OandaAPI(token, accountId, environment);   // Original
+    this.log(`Engine v4 initialised | ${environment.toUpperCase()} | ${accountId}`);
+  }
+
   async start() {
     if (!this.api) { this.log("ERROR: call init() first"); return; }
     if (this.state.isLive) return;
@@ -668,8 +668,7 @@ init(token: string, accountId: string, environment: "practice" | "live") {
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
 
-        // === ACCOUNT REFRESH + EQUITY PROTECTION ===
-    try {
+        try {
       const acct = await this.api.getAccount();
       this.state.accountBalance = acct.balance;
       this.state.accountEquity = acct.equity;
@@ -677,31 +676,11 @@ init(token: string, accountId: string, environment: "practice" | "live") {
       this.state.equityCurve.push({ time: Date.now(), equity: acct.equity });
       this.dailyStartBalance = acct.balance;
       this.dailyStartDate = new Date().toDateString();
-
       this.log(`Account: ${acct.currency} ${acct.balance.toFixed(2)} | Equity: ${acct.equity.toFixed(2)}`);
-
-      // === EQUITY CURVE PROTECTION (Phase 0 Safety) ===
-      const peakEquity = this.state.equityCurve?.length 
-        ? Math.max(...this.state.equityCurve.map((e: any) => e.equity))
-        : this.state.accountEquity;
-      
-      const currentDd = peakEquity > 0 
-        ? ((peakEquity - this.state.accountEquity) / peakEquity) * 100 
-        : 0;
-
-      if (currentDd > 5) {
-        const oldRisk = this.state.config.riskPercent;
-        this.state.config.riskPercent = Math.max(0.3, this.state.config.riskPercent * 0.5);
-        this.log(`🛡️ Equity protection: ${currentDd.toFixed(1)}% DD — risk reduced ${oldRisk}% → ${this.state.config.riskPercent}%`);
-      } else if (currentDd < 2 && this.state.config.riskPercent < 1.0) {
-        this.state.config.riskPercent = Math.min(1.0, this.state.config.riskPercent * 1.05);
-      }
-      // =========================================
     } catch (e: any) {
       this.log(`WARNING: Could not fetch account: ${e.message}`);
     }
 
-    // === TRADE RECONCILIATION ===
     try {
       const openTrades = await this.api.getOpenTrades();
       this.previousOpenTradeIds = new Set(openTrades.map(t => t.id));
@@ -722,7 +701,7 @@ init(token: string, accountId: string, environment: "practice" | "live") {
           });
         }
       }
-      this.log(`📋 Bootstrapped ${openTrades.length} open trade IDs + snapshots (via RobustOandaAPI)`);
+      this.log(`📋 Bootstrapped ${openTrades.length} open trade IDs + snapshots`);
     } catch (e: any) {
       this.log(`⚠️ Reconciliation warning: ${e.message}`);
     }
