@@ -1425,7 +1425,7 @@ if (cutoff > 0) {
     }
   } // ← This closes checkClosedTrades()
 
-  /  // === TRAILING STOPS METHOD (Clean & Safe) ===
+  // === TRAILING STOPS METHOD (Clean & Safe) ===
   async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
