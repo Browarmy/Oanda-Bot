@@ -605,7 +605,7 @@ export class AutonomousEngine extends EventEmitter {
   private tradesSinceWalkForward = 0;
   private m15Cache: Map<string, { candles: any[]; fetchedAt: number }> = new Map();
 
-  constructor() {
+    constructor() {
     super();
     this.state = {
       isLive: false,
@@ -639,12 +639,17 @@ export class AutonomousEngine extends EventEmitter {
       currentSession: "UNKNOWN",
       tradeHistory: [],
     };
+
     for (const pair of ALL_PAIRS) {
       this.adaptiveWeights.set(pair, {
-        minConfidence: 0.78,   // raised from 0.72
+        minConfidence: 0.78,
         wins: 0, losses: 0, consecutiveLosses: 0,
       });
     }
+
+    // Initialize Sets for trailing stop management (required for esbuild compatibility)
+    this.partialTpTaken = new Set<string>();
+    this.breakevenSet = new Set<string>();
   }
 
 init(token: string, accountId: string, environment: "practice" | "live") {
@@ -1426,10 +1431,8 @@ if (cutoff > 0) {
           this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
         }
 
-    // Track which trades have had partial TP taken (50% close at 1.5R)
-  private partialTpTaken = new Set<string>();
-  // Track which trades have had SL moved to breakeven (1R)
-  private breakevenSet = new Set<string>();
+      private partialTpTaken: Set<string>;
+  private breakevenSet: Set<string>;
 
   private async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
