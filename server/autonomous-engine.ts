@@ -1060,23 +1060,27 @@ if (cutoff > 0) {
       pairStat.trend = finalTrend;
       pairStat.signalStrength = finalConfidence;
 
-      if (finalAction === "WAIT") {
-        // === ENHANCED REJECTION LOGGING (Safe & Informative) ===
+            if (finalAction === "WAIT") {
+        // === ENHANCED REJECTION LOGGING (Safe) ===
         let rejectDetails = `Regime:${regime.regime} | Conf:${(finalConfidence*100).toFixed(0)}%`;
 
         if (spreadPips > this.state.config.maxSpreadPips) {
-          rejectDetails += ` | SPREAD:${spreadPips.toFixed(1)}p > max ${this.state.config.maxSpreadPips}p`;
+          rejectDetails += ` | SPREAD:${spreadPips.toFixed(1)}p > max`;
         }
         if (this.portfolioHeat > 4) {
           rejectDetails += ` | HIGH_HEAT:${this.portfolioHeat.toFixed(1)}%`;
         }
-        if (newsCheck && newsCheck.blocked) {
-          rejectDetails += ` | NEWS:${newsCheck.reason || 'blocked'}`;
+
+        // Safe news check
+        const newsBlocked = newsCheck && newsCheck.blocked;
+        if (newsBlocked) {
+          rejectDetails += ` | NEWS BLOCKED`;
         }
 
         this.log(`🔍 ${pairStat.instrument} — WAIT | ${rejectDetails} | ${finalReason}`);
         return;
       }
+
       // ── H4 EMA50 TREND FILTER ──────────────────────────────────────────────
       if (h4.length >= 50) {
         const h4closes = h4.map(c => c.close);
