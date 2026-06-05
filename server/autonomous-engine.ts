@@ -1417,7 +1417,7 @@ if (cutoff > 0) {
           this.partialTpTaken = new Set<string>();
     this.breakevenSet = new Set<string>();
 
-  private async manageTrailingStops(openTrades: OpenTrade[]) {
+    async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
       const snap = this.openTradeSnapshots.get(trade.id);
