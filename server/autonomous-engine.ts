@@ -1397,7 +1397,7 @@ if (cutoff > 0) {
           closedAt: closed.closedAt,
         });
 
-        // === EVOLUTION TRIGGER FIX (Safe) ===
+              // === EVOLUTION TRIGGER FIX (Safe) ===
         if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
           this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
           await learningEngine.evolve?.();
@@ -1423,9 +1423,9 @@ if (cutoff > 0) {
       }
       this.openTradeSnapshots.delete(prevId);
     }
-  } // ← This closes checkClosedTrades()
+  } // ← End of checkClosedTrades()
 
-  // === TRAILING STOPS METHOD (Clean & Safe) ===
+  // === CLEAN TRAILING STOPS METHOD ===
   async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
@@ -1440,11 +1440,9 @@ if (cutoff > 0) {
         const slDist = Math.abs(snap.entryPrice - snap.stopLoss);
         if (slDist === 0) continue;
 
-        const profitDist =
-  trade.direction === "BUY"
-    ? currentPrice - snap.entryPrice
-    : snap.entryPrice - currentPrice;
-
+        const profitDist = trade.direction === "BUY" 
+          ? currentPrice - snap.entryPrice 
+          : snap.entryPrice - currentPrice;
         const R = profitDist / slDist;
 
         this.log(`📈 TRAIL: ${trade.instrument} R:${R.toFixed(1)}`);
@@ -1454,16 +1452,6 @@ if (cutoff > 0) {
       }
     }
   }
-
-        // Use cached M15 candles for live ATR — no extra API calls
-        const cached = this.m15Cache.get(trade.instrument);
-        let currentAtr = slDist; // fallback to entry SL if no candles
-        if (cached && cached.candles.length >= 15) {
-          const atrCalc = calcAtr(cached.candles, 14);
-          if (atrCalc > 0) currentAtr = atrCalc;
-        }
-
-        const minMove = isJpy ? 0.005 : 0.00003;
 
         // ── STAGE 1: Breakeven at 1R ────────────────────────────────────────────
         if (R >= 1.0 && !this.breakevenSet.has(trade.id)) {
