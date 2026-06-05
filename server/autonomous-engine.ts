@@ -1431,8 +1431,8 @@ if (cutoff > 0) {
           this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
         }
 
-      private partialTpTaken: Set<string>;
-  private breakevenSet: Set<string>;
+          this.partialTpTaken = new Set<string>();
+    this.breakevenSet = new Set<string>();
 
   private async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
