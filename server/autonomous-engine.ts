@@ -1440,9 +1440,10 @@ if (cutoff > 0) {
         const slDist = Math.abs(snap.entryPrice - snap.stopLoss);
         if (slDist === 0) continue;
 
-        const profitDist = trade.direction === "BUY" 
-          ? currentPrice - snap.entryPrice; 
-          : snap.entryPrice - currentPrice;
+        const profitDist =
+  trade.direction === "BUY"
+    ? currentPrice - snap.entryPrice
+    : snap.entryPrice - currentPrice;
 
         const R = profitDist / slDist;
 
