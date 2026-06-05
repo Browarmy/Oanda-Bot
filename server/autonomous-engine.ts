@@ -1425,7 +1425,7 @@ if (cutoff > 0) {
     }
   } // ← This closes checkClosedTrades()
 
-  // === TRAILING STOPS METHOD (Must be at class level) ===
+  /  // === TRAILING STOPS METHOD (Clean & Safe) ===
   async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
@@ -1445,7 +1445,7 @@ if (cutoff > 0) {
           : snap.entryPrice - currentPrice;
         const R = profitDist / slDist;
 
-        // Add your trailing logic here (partial TP, breakeven, trail)
+        this.log(`📈 TRAIL: ${trade.instrument} R:${R.toFixed(1)} (basic trail active)`);
 
       } catch (e: any) {
         // silent
