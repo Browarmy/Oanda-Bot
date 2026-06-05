@@ -835,12 +835,13 @@ if (cutoff > 0) {
         return;
       }
 
-      // Refresh account
+            // Refresh account
       try {
         const acct = await this.api.getAccount();
         this.state.accountBalance = acct.balance;
         this.state.accountEquity = acct.equity;
         this.state.accountCurrency = acct.currency;
+        
         // Reset daily balance tracker at start of new day
         const today = new Date().toDateString();
         if (today !== this.dailyStartDate) {
@@ -848,11 +849,30 @@ if (cutoff > 0) {
           this.dailyStartDate = today;
           this.log(`📅 New trading day — daily balance reset to ${acct.balance.toFixed(2)}`);
         }
+        
         const lastEq = this.state.equityCurve[this.state.equityCurve.length - 1];
         if (!lastEq || Math.abs(lastEq.equity - acct.equity) > 0.001) {
           this.state.equityCurve.push({ time: Date.now(), equity: acct.equity });
           if (this.state.equityCurve.length > EQUITY_CURVE_MAX) this.state.equityCurve.shift();
         }
+
+        // === DAY 1: EQUITY CURVE PROTECTION ===
+        const peakEquity = this.state.equityCurve?.length 
+          ? Math.max(...this.state.equityCurve.map((e: any) => e.equity))
+          : this.state.accountEquity;
+        
+        const currentDd = peakEquity > 0 
+          ? ((peakEquity - this.state.accountEquity) / peakEquity) * 100 
+          : 0;
+
+        if (currentDd > 5) {
+          const oldRisk = this.state.config.riskPercent;
+          this.state.config.riskPercent = Math.max(0.3, this.state.config.riskPercent * 0.5);
+          this.log(`🛡️ Equity protection: ${currentDd.toFixed(1)}% DD — risk reduced ${oldRisk}% → ${this.state.config.riskPercent}%`);
+        } else if (currentDd < 2 && this.state.config.riskPercent < 1.0) {
+          this.state.config.riskPercent = Math.min(1.0, this.state.config.riskPercent * 1.05);
+        }
+        // =========================================
       } catch (e: any) {
         this.log(`Account refresh failed: ${e.message}`);
       }
