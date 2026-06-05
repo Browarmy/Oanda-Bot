@@ -1445,7 +1445,7 @@ if (cutoff > 0) {
           : snap.entryPrice - currentPrice;
         const R = profitDist / slDist;
 
-        this.log(`📈 TRAIL: ${trade.instrument} R:${R.toFixed(1)} (basic trail active)`);
+        this.log(`📈 TRAIL: ${trade.instrument} R:${R.toFixed(1)}`);
 
       } catch (e: any) {
         // silent
