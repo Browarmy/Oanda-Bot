@@ -1369,7 +1369,7 @@ if (cutoff > 0) {
           pips: parseFloat(pips.toFixed(1)),
           reason: closeReason, currency: this.state.accountCurrency,
         }).catch(() => {});
-        // Feed closed trade to learning engine
+             // Feed closed trade to learning engine
         const snapSignal = (snap as any)?._signal ?? {};
         learningEngine.recordTrade({
           instrument,
@@ -1387,19 +1387,23 @@ if (cutoff > 0) {
           openTime: closed.openTime,
           closedAt: closed.closedAt,
         });
-        // Apply any evolved params back to config
-        const lp = learningEngine.getParams();
-        this.state.config.rsiLower = lp.rsiLower;
-        this.state.config.rsiUpper = lp.rsiUpper;
-        this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
-        this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
-        this.state.config.minConfidence = lp.minConfidence;
-      } catch {
-        this.log(`📊 Trade ${prevId} closed`);
-      }
-      this.openTradeSnapshots.delete(prevId);
-    }
-  }
+
+        // === EVOLUTION TRIGGER FIX ===
+        // Force evolution check after sufficient trades
+        if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
+          this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
+          
+          await learningEngine.evolve();   // Main evolution call
+          
+          const lp = learningEngine.getParams();
+          this.state.config.rsiLower = lp.rsiLower;
+          this.state.config.rsiUpper = lp.rsiUpper;
+          this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
+          this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
+          this.state.config.minConfidence = lp.minConfidence;
+          
+          this.tradesSinceWalkForward = 0;
+          this.log(`✅ Evolution complete
 
     // Track which trades have had partial TP taken (50% close at 1.5R)
   private partialTpTaken = new Set<string>();
