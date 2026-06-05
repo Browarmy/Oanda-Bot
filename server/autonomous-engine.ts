@@ -1397,19 +1397,16 @@ if (cutoff > 0) {
           closedAt: closed.closedAt,
         });
 
-                     // === EVOLUTION TRIGGER FIX (Safe) ===
+        // === EVOLUTION TRIGGER FIX (Safe) ===
         if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
           this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
-          
-          await learningEngine.evolve?.();   // Safe call
-          
+          await learningEngine.evolve?.();
           const lp = learningEngine.getParams();
           this.state.config.rsiLower = lp.rsiLower;
           this.state.config.rsiUpper = lp.rsiUpper;
           this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
           this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
           this.state.config.minConfidence = lp.minConfidence;
-          
           this.tradesSinceWalkForward = 0;
           this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
         }
@@ -1426,9 +1423,9 @@ if (cutoff > 0) {
       }
       this.openTradeSnapshots.delete(prevId);
     }
-  }   // ← End of checkClosedTrades()
+  } // ← This closes checkClosedTrades()
 
-  // === TRAILING STOPS METHOD (Properly placed as class method) ===
+  // === TRAILING STOPS METHOD (Must be at class level) ===
   async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
@@ -1448,10 +1445,10 @@ if (cutoff > 0) {
           : snap.entryPrice - currentPrice;
         const R = profitDist / slDist;
 
-        // Add your existing trailing logic here (breakeven, partial TP, trail) if needed
+        // Add your trailing logic here (partial TP, breakeven, trail)
 
       } catch (e: any) {
-        // silent fail
+        // silent
       }
     }
   }
