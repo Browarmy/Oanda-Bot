@@ -1034,8 +1034,21 @@ if (cutoff > 0) {
       pairStat.trend = finalTrend;
       pairStat.signalStrength = finalConfidence;
 
-      if (finalAction === "WAIT") {
-        this.log(`🔍 ${pairStat.instrument} [${regime.regime}] — ${finalReason}`);
+            if (finalAction === "WAIT") {
+        // === ENHANCED REJECTION LOGGING (Detailed Breakdown) ===
+        const confluence = (buyCount || sellCount || 0);
+        let rejectDetails = `Confluence: ${confluence}/5 | Regime:${regime.regime} | H1:${h1TrendBull ? "↑" : h1TrendBear ? "↓" : "→"} M15:${m15EmaBull ? "↑" : m15EmaBear ? "↓" : "→"}`;
+        
+        if (spreadPips > this.state.config.maxSpreadPips) rejectDetails += ` | SPREAD:${spreadPips.toFixed(1)}p`;
+        if (this.portfolioHeat > 4) rejectDetails += ` | HEAT:${this.portfolioHeat.toFixed(1)}%`;
+        if (newsCheck && newsCheck.blocked) rejectDetails += ` | NEWS:${newsCheck.reason}`;
+        if (h4.length >= 40) {
+          const h4TrendOk = (finalAction === "BUY" && h4closes[h4closes.length-1] > h4ema50) || 
+                           (finalAction === "SELL" && h4closes[h4closes.length-1] < h4ema50);
+          if (!h4TrendOk) rejectDetails += " | H4_COUNTER_TREND";
+        }
+
+        this.log(`🔍 ${pairStat.instrument} [${regime.regime}] — WAIT | ${rejectDetails} | Conf:${(finalConfidence*100).toFixed(0)}% | ${finalReason}`);
         return;
       }
 
