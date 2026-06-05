@@ -1409,12 +1409,11 @@ if (cutoff > 0) {
           closedAt: closed.closedAt,
         });
 
-        // === EVOLUTION TRIGGER FIX ===
-        // Force evolution check after sufficient trades
+                // === EVOLUTION TRIGGER FIX (Safe) ===
         if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
           this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
           
-          await learningEngine.evolve();   // Main evolution call
+          await learningEngine.evolve?.();   // Safe call with optional chaining
           
           const lp = learningEngine.getParams();
           this.state.config.rsiLower = lp.rsiLower;
@@ -1424,7 +1423,8 @@ if (cutoff > 0) {
           this.state.config.minConfidence = lp.minConfidence;
           
           this.tradesSinceWalkForward = 0;
-          this.log(`✅ Evolution complete
+          this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
+        }
 
     // Track which trades have had partial TP taken (50% close at 1.5R)
   private partialTpTaken = new Set<string>();
