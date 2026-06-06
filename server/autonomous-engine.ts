@@ -1405,7 +1405,33 @@ if (cutoff > 0) {
     }
   } // ← End of checkClosedTrades()
 
+  // === MINIMAL TRAILING STOPS (Safe for Build) ===
+  async manageTrailingStops(openTrades: OpenTrade[]) {
+    if (!this.api) return;
+    for (const trade of openTrades) {
+      const snap = this.openTradeSnapshots.get(trade.id);
+      if (!snap) continue;
+      try {
+        const price = await this.api.getPrice(trade.instrument);
+        const currentPrice = trade.direction === "BUY" ? price.bid : price.ask;
+        const isJpy = trade.instrument.includes("JPY");
+        const dp = isJpy ? 3 : 5;
 
+        const slDist = Math.abs(snap.entryPrice - snap.stopLoss);
+        if (slDist === 0) continue;
+
+        const profitDist = trade.direction === "BUY" 
+          ? currentPrice - snap.entryPrice 
+          : snap.entryPrice - currentPrice;
+        const R = profitDist / slDist;
+
+        this.log(`📈 TRAIL: ${trade.instrument} R:${R.toFixed(1)}`);
+
+      } catch (e: any) {
+        // silent
+      }
+    }
+  }
 
         // ── STAGE 1: Breakeven at 1R ────────────────────────────────────────────
         if (R >= 1.0 && !this.breakevenSet.has(trade.id)) {
