@@ -1405,7 +1405,7 @@ if (cutoff > 0) {
     }
   } // ← End of checkClosedTrades()
 
-  // === CLEAN TRAILING STOPS METHOD ===
+    // === MINIMAL CLEAN TRAILING STOPS (Fixed Structure) ===
   async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
