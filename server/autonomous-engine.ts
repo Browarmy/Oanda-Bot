@@ -1039,21 +1039,15 @@ if (cutoff > 0) {
       pairStat.trend = finalTrend;
       pairStat.signalStrength = finalConfidence;
 
-            if (finalAction === "WAIT") {
-        // === ENHANCED REJECTION LOGGING (Safe) ===
+               if (finalAction === "WAIT") {
+        // === SAFE DETAILED REJECTION LOGGING ===
         let rejectDetails = `Regime:${regime.regime} | Conf:${(finalConfidence*100).toFixed(0)}%`;
 
         if (spreadPips > this.state.config.maxSpreadPips) {
-          rejectDetails += ` | SPREAD:${spreadPips.toFixed(1)}p > max`;
+          rejectDetails += ` | SPREAD:${spreadPips.toFixed(1)}p`;
         }
         if (this.portfolioHeat > 4) {
-          rejectDetails += ` | HIGH_HEAT:${this.portfolioHeat.toFixed(1)}%`;
-        }
-
-        // Safe news check
-        const newsBlocked = newsCheck && newsCheck.blocked;
-        if (newsBlocked) {
-          rejectDetails += ` | NEWS BLOCKED`;
+          rejectDetails += ` | HEAT:${this.portfolioHeat.toFixed(1)}%`;
         }
 
         this.log(`🔍 ${pairStat.instrument} — WAIT | ${rejectDetails} | ${finalReason}`);
@@ -1378,7 +1372,8 @@ if (cutoff > 0) {
           pips: parseFloat(pips.toFixed(1)),
           reason: closeReason, currency: this.state.accountCurrency,
         }).catch(() => {});
-             // Feed closed trade to learning engine
+            
+        // Feed closed trade to learning engine
         const snapSignal = (snap as any)?._signal ?? {};
         learningEngine.recordTrade({
           instrument,
@@ -1396,21 +1391,6 @@ if (cutoff > 0) {
           openTime: closed.openTime,
           closedAt: closed.closedAt,
         });
-
-              // === EVOLUTION TRIGGER FIX (Safe) ===
-        if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
-          this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
-          await learningEngine.evolve?.();
-          const lp = learningEngine.getParams();
-          this.state.config.rsiLower = lp.rsiLower;
-          this.state.config.rsiUpper = lp.rsiUpper;
-          this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
-          this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
-          this.state.config.minConfidence = lp.minConfidence;
-          this.tradesSinceWalkForward = 0;
-          this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
-        }
-
         // Apply any evolved params back to config
         const lp = learningEngine.getParams();
         this.state.config.rsiLower = lp.rsiLower;
