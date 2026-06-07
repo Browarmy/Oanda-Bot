@@ -711,37 +711,46 @@ export class AutonomousEngine extends EventEmitter {
       this.log(`⚠️ Reconciliation warning: ${e.message}`);
     }
 
-            await this.backfillClosedTrades();
+     await this.backfillClosedTrades();
 
     // === DAILY PERFORMANCE SUMMARY ===
     const winRate = this.state.totalTrades > 0 
       ? ((this.state.totalWins / this.state.totalTrades) * 100).toFixed(1) 
-      : 0;
+      : "0";
     const expectancy = this.state.totalTrades > 0 
       ? (this.state.totalPnl / this.state.totalTrades).toFixed(2) 
-      : 0;
+      : "0";
+
     this.log(`📊 DAILY SUMMARY | Trades: ${this.state.totalTrades} | Win Rate: ${winRate}% | Total P&L: ${this.state.totalPnl.toFixed(2)} | Expectancy: ${expectancy} | Equity: ${this.state.accountEquity.toFixed(2)}`);
 
-    // === AUTOMATIC DAILY STATS TO DATABASE ===
-    const winRateNum = this.state.totalTrades > 0 
-      ? ((this.state.totalWins / this.state.totalTrades) * 100) 
-      : 0;
-    const expectancyNum = this.state.totalTrades > 0 
-      ? (this.state.totalPnl / this.state.totalTrades) 
-      : 0;
+    // === SAFE DAILY STATS TO DATABASE (Prevents Crash) ===
+    try {
+      if (typeof db !== 'undefined' && typeof dailyStats !== 'undefined') {
+        const winRateNum = this.state.totalTrades > 0 
+          ? ((this.state.totalWins / this.state.totalTrades) * 100) 
+          : 0;
+        const expectancyNum = this.state.totalTrades > 0 
+          ? (this.state.totalPnl / this.state.totalTrades) 
+          : 0;
 
-    await db.insert(dailyStats).values({
-      date: new Date(),
-      totalTrades: this.state.totalTrades,
-      totalWins: this.state.totalWins,
-      totalLosses: this.state.totalLosses || 0,
-      totalPnl: this.state.totalPnl.toString(),
-      winRate: winRateNum.toFixed(2),
-      expectancy: expectancyNum.toFixed(2),
-      equity: this.state.accountEquity.toString(),
-    }).onConflictDoNothing();
+        await db.insert(dailyStats).values({
+          date: new Date(),
+          totalTrades: this.state.totalTrades,
+          totalWins: this.state.totalWins,
+          totalLosses: this.state.totalLosses || 0,
+          totalPnl: this.state.totalPnl.toString(),
+          winRate: winRateNum.toFixed(2),
+          expectancy: expectancyNum.toFixed(2),
+          equity: this.state.accountEquity.toString(),
+        }).onConflictDoNothing();
 
-    this.log(`📊 DAILY STATS SAVED TO DB | Trades: ${this.state.totalTrades} | Win Rate: ${winRateNum.toFixed(1)}% | P&L: ${this.state.totalPnl.toFixed(2)}`);
+        this.log(`📊 DAILY STATS SAVED TO DB`);
+      } else {
+        this.log(`📊 DB not available — daily stats logged to console only`);
+      }
+    } catch (e: any) {
+      this.log(`⚠️ Could not save to DB (safe): ${e.message}`);
+    }
 
     this.scanTimer = setInterval(() => this.scanAllPairs(), SCAN_INTERVAL_MS);
     this.scanAllPairs();
