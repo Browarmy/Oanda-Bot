@@ -1433,7 +1433,7 @@ if (cutoff > 0) {
     }
   } // ← End of checkClosedTrades()
 
-  private async manageTrailingStops(openTrades: OpenTrade[]) {
+    private async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
       const snap = this.openTradeSnapshots.get(trade.id);
@@ -1455,7 +1455,7 @@ if (cutoff > 0) {
           : snap.entryPrice - currentPrice;
         const R = profitDist / slDist;
 
-        // Live ATR from cached M15 candles — no extra API calls
+        // Live ATR from cached M15 candles
         const cached = this.m15Cache.get(trade.instrument);
         let currentAtr = slDist;
         if (cached && cached.candles.length >= 15) {
@@ -1465,7 +1465,7 @@ if (cutoff > 0) {
 
         const minMove = isJpy ? 0.005 : 0.00003;
 
-        // ── Stage 1: Breakeven at 1R ──────────────────────────────────────────
+        // Stage 1: Breakeven at 1R
         if (R >= 1.0 && !this.breakevenSet.has(trade.id)) {
           const buffer = slDist * 0.05;
           const beSl = trade.direction === "BUY"
@@ -1485,7 +1485,7 @@ if (cutoff > 0) {
           this.breakevenSet.add(trade.id);
         }
 
-        // ── Stage 2: Partial TP at 1.5R ───────────────────────────────────────
+        // Stage 2: Partial TP at 1.5R (lock in profit)
         if (!this.partialTpTaken.has(trade.id) && R >= 1.5 && trade.units >= 200) {
           const halfUnits = Math.floor(trade.units / 2);
           const closeUnits = trade.direction === "BUY" ? -halfUnits : halfUnits;
@@ -1508,9 +1508,8 @@ if (cutoff > 0) {
           } catch { /* non-critical */ }
         }
 
-        // ── Stage 3 & 4: Dynamic trail at 2R+ ────────────────────────────────
-        if (!this.state.config.trailingStopEnabled) continue;
-        if (R < 2.0) continue;
+        // Stage 3: Dynamic trailing at 2R+
+        if (!this.state.config.trailingStopEnabled || R < 2.0) continue;
 
         const trailMult = R >= 3.0 ? 1.0 : 1.5;
         const newSl = trade.direction === "BUY"
@@ -1528,7 +1527,9 @@ if (cutoff > 0) {
         snap.stopLoss = newSl;
         this.log(`📈 TRAIL: ${trade.instrument} SL → ${newSl.toFixed(dp)} [R:${R.toFixed(1)} | ${trailMult}×ATR]`);
 
-      } catch { /* non-critical */ }
+      } catch (e: any) {
+        // silent
+      }
     }
   }
 
