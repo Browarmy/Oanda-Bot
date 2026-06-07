@@ -416,7 +416,7 @@ const worstTrade = tradeHist.length > 0
           </>
         )}
 
-         {/* ── DAILY STATS + POSITIONS TAB ── */}
+        {/* ── DAILY STATS + POSITIONS TAB ── */}
         {tab === "positions" && (
           <div className="space-y-6">
             {/* ==================== DAILY / OVERALL STATS ==================== */}
@@ -460,6 +460,19 @@ const worstTrade = tradeHist.length > 0
 
             {/* ── OPEN POSITIONS ── */}
             <div className="space-y-3">
+              {openTrades.length === 0 ? (
+                <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
+                  style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                  <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
+                  <p className="text-sm font-bold" style={{ color: C.muted }}>No open positions</p>
+                  <p className="text-xs text-center" style={{ color: C.muted }}>The bot is scanning for opportunities</p>
+                </div>
+              ) : openTrades.map((trade: any) => {
+                // ... (keep all your existing trade mapping code here unchanged)
+              })}
+            </div>
+          </div>
+        )}
 
                   {/* Price grid */}
                   <div className="grid grid-cols-4 gap-2 mb-3">
