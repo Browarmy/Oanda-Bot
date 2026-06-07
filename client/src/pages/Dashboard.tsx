@@ -416,61 +416,71 @@ const worstTrade = tradeHist.length > 0
           </>
         )}
 
-        {/* ── DAILY STATS + POSITIONS TAB ── */}
+              {/* ── POSITIONS ── */}
         {tab === "positions" && (
-          <div className="space-y-6">
-            {/* ==================== DAILY / OVERALL STATS ==================== */}
-            <div className="p-5 rounded-2xl" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold flex items-center gap-2" style={{ color: C.amber }}>
-                  📊 Daily / Overall Stats
-                </h3>
-                <span className="text-xs" style={{ color: C.muted }}>
-                  {new Date().toLocaleDateString()}
-                </span>
+          <div className="space-y-3">
+            {openTrades.length === 0 ? (
+              <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
+                style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+                <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
+                <p className="text-sm font-bold" style={{ color: C.muted }}>No open positions</p>
+                <p className="text-xs text-center" style={{ color: C.muted }}>The bot is scanning for opportunities</p>
               </div>
+            ) : openTrades.map((trade: any) => {
+              const lp = (livePrices as any)?.[trade.instrument];
+              const currentPrice = lp?.mid ?? trade.entryPrice;
+              const isJpy = trade.instrument.includes("JPY");
+              const pipFactor = isJpy ? 100 : 10000;
+              const rawDiff = trade.direction === "BUY" ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
+              const livePips = rawDiff * pipFactor;
+              const isProfit = livePips >= 0;
+              const tpDist = Math.abs(trade.takeProfit - trade.entryPrice);
+              const progress = tpDist > 0 ? Math.max(0, Math.min(100, (rawDiff / tpDist) * 100)) : 0;
+              const dp = isJpy ? 3 : 5;
+              const durationMs = Date.now() - trade.openTime;
+              const durationMin = Math.floor(durationMs / 60000);
+              const durationStr = durationMin < 60 ? `${durationMin}m` : `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`;
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total Trades</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>36</p>
+              return (
+                <div key={trade.id} className="rounded-3xl p-4"
+                  style={{ background: C.s1, border: `2px solid ${isProfit ? C.green + "44" : C.red + "44"}` }}>
+                  {/* Header row */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black px-3 py-1 rounded-full"
+                        style={{
+                          background: trade.direction === "BUY" ? "#00e67615" : "#ff444415",
+                          color: trade.direction === "BUY" ? C.green : C.red,
+                          border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}44`,
+                        }}>{trade.direction}</span>
+                      <span className="text-base font-black">{trade.instrument.replace("_", "/")}</span>
+                      <span className="text-xs" style={{ color: C.muted }}>{durationStr}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-black font-mono" style={{ color: isProfit ? C.green : C.red }}>
+                        {isProfit ? "+" : ""}{livePips.toFixed(1)}p
+                      </span>
+                      <button
+                        onClick={() => { if (!closingTrades.has(trade.id)) closeTradeMutation.mutate({ tradeId: trade.id }); }}
+                        disabled={closingTrades.has(trade.id)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-90 transition-all disabled:opacity-60"
+                        style={{ background: closingTrades.has(trade.id) ? "#ff444440" : "#ff444420", color: C.red, border: `1px solid ${C.red}44`, minWidth: 56 }}>
+                        {closingTrades.has(trade.id) ? (
+                          <span className="flex items-center gap-1 justify-center">
+                            <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span>...</span>
+                          </span>
+                        ) : "Close"}
+                      </button>
+                    </div>
+                  </div>
+                  {/* Rest of your trade card code continues here... */}
                 </div>
-
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Win Rate</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>52.8%</p>
-                </div>
-
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total P&L</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>+£611.38</p>
-                </div>
-
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Expectancy</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>£16.98</p>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-border flex justify-between text-sm" style={{ color: C.muted }}>
-                <div>Profit Factor: <span style={{ color: C.amber }}>1.12</span></div>
-                <div>Max DD: <span style={{ color: C.green }}>0.00%</span></div>
-              </div>
-            </div>
-
-            {/* ── OPEN POSITIONS ── */}
-            <div className="space-y-3">
-              {openTrades.length === 0 ? (
-                <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
-                  style={{ background: C.s1, border: `1px solid ${C.border}` }}>
-                  <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
-                  <p className="text-sm font-bold" style={{ color: C.muted }}>No open positions</p>
-                  <p className="text-xs text-center" style={{ color: C.muted }}>The bot is scanning for opportunities</p>
-                </div>
-              ) : openTrades.map((trade: any) => {
-                // ... (keep all your existing trade mapping code here unchanged)
-              })}
-            </div>
+              );
+            })}
           </div>
         )}
 
