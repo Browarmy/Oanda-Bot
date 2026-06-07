@@ -1402,7 +1402,7 @@ if (cutoff > 0) {
           closedAt: closed.closedAt,
         });
 
-                // === LEARNING EVOLUTION FIX — Trigger at 30 trades (adjusted for current progress) ===
+                // === LEARNING EVOLUTION FIX — Reliable Trigger ===
         if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 4) {
           this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
           
