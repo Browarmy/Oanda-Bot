@@ -711,7 +711,17 @@ export class AutonomousEngine extends EventEmitter {
       this.log(`⚠️ Reconciliation warning: ${e.message}`);
     }
 
-    await this.backfillClosedTrades();
+        await this.backfillClosedTrades();
+
+    // === DAILY PERFORMANCE SUMMARY ===
+    const winRate = this.state.totalTrades > 0 
+      ? ((this.state.totalWins / this.state.totalTrades) * 100).toFixed(1) 
+      : 0;
+    const expectancy = this.state.totalTrades > 0 
+      ? (this.state.totalPnl / this.state.totalTrades).toFixed(2) 
+      : 0;
+    this.log(`📊 DAILY SUMMARY | Trades: ${this.state.totalTrades} | Win Rate: ${winRate}% | Total P&L: ${this.state.totalPnl.toFixed(2)} | Expectancy: ${expectancy} | Equity: ${this.state.accountEquity.toFixed(2)}`);
+
     this.scanTimer = setInterval(() => this.scanAllPairs(), SCAN_INTERVAL_MS);
     this.scanAllPairs();
   }
