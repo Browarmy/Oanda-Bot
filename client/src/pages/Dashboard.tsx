@@ -419,6 +419,12 @@ const worstTrade = tradeHist.length > 0
               {/* ── POSITIONS ── */}
         {tab === "positions" && (
           <div className="space-y-3">
+
+<div style={{ color: "white", padding: "8px" }}>
+  DEBUG: openTrades = {openTrades?.length ?? "undefined"}
+</div>
+
+
             {openTrades.length === 0 ? (
               <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
                 style={{ background: C.s1, border: `1px solid ${C.border}` }}>
