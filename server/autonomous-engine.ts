@@ -1391,6 +1391,24 @@ if (cutoff > 0) {
           openTime: closed.openTime,
           closedAt: closed.closedAt,
         });
+
+// === LEARNING EVOLUTION FIX — Trigger at 30 trades ===
+        if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
+          this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
+          
+          await learningEngine.evolve?.();   // Safe call
+          
+          const lp = learningEngine.getParams();
+          this.state.config.rsiLower = lp.rsiLower;
+          this.state.config.rsiUpper = lp.rsiUpper;
+          this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
+          this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
+          this.state.config.minConfidence = lp.minConfidence;
+          
+          this.tradesSinceWalkForward = 0;
+          this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
+        }
+
         // Apply any evolved params back to config
         const lp = learningEngine.getParams();
         this.state.config.rsiLower = lp.rsiLower;
