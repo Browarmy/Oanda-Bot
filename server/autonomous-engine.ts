@@ -1392,8 +1392,8 @@ if (cutoff > 0) {
           closedAt: closed.closedAt,
         });
 
-// === LEARNING EVOLUTION FIX — Trigger at 30 trades ===
-        if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 6) {
+        // === LEARNING EVOLUTION FIX — Trigger at 30 trades (adjusted for current progress) ===
+        if (this.state.totalTrades >= 36 && this.tradesSinceWalkForward >= 4) {
           this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
           
           await learningEngine.evolve?.();   // Safe call
