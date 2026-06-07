@@ -1433,7 +1433,7 @@ if (cutoff > 0) {
     }
   } // ← End of checkClosedTrades()
 
-    private async manageTrailingStops(openTrades: OpenTrade[]) {
+      private async manageTrailingStops(openTrades: OpenTrade[]) {
     if (!this.api) return;
     for (const trade of openTrades) {
       const snap = this.openTradeSnapshots.get(trade.id);
