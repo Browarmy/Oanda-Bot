@@ -596,9 +596,12 @@ const worstTrade = tradeHist.length > 0
         {isProfit ? "+" : ""}
         {(trade.unrealisedPnl ?? 0).toFixed(2)} {currency}
       </span>
+     </div>
     </div>
-  </div>
 );
+            })}
+          </div>
+        )}
 
         {/* ── HISTORY ── */}
         {tab === "history" && (
