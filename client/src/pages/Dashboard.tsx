@@ -416,16 +416,57 @@ const worstTrade = tradeHist.length > 0
           </>
         )}
 
-              {/* ── POSITIONS ── */}
+                         {/* ── DAILY STATS + POSITIONS ── */}
         {tab === "positions" && (
-          <div className="space-y-3">
+          <div className="space-y-6">
 
-<div style={{ color: "white", padding: "8px" }}>
-  DEBUG: openTrades = {openTrades?.length ?? "undefined"}
-</div>
+            {/* ==================== DAILY / OVERALL STATS ==================== */}
+            <div className="p-5 rounded-2xl" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold flex items-center gap-2" style={{ color: C.amber }}>
+                  📊 Daily / Overall Stats
+                </h3>
+                <span className="text-xs" style={{ color: C.muted }}>
+                  {new Date().toLocaleDateString()}
+                </span>
+              </div>
 
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
+                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total Trades</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>36</p>
+                </div>
 
-            {openTrades.length === 0 ? (
+                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
+                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Win Rate</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>52.8%</p>
+                </div>
+
+                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
+                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total P&L</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>+£611.38</p>
+                </div>
+
+                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
+                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Expectancy</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>£16.98</p>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-border flex justify-between text-sm" style={{ color: C.muted }}>
+                <div>Profit Factor: <span style={{ color: C.amber }}>1.12</span></div>
+                <div>Max DD: <span style={{ color: C.green }}>0.00%</span></div>
+              </div>
+            </div>
+
+            {/* Debug line (you can remove later) */}
+            <div style={{ color: "white", padding: "8px" }}>
+              DEBUG: openTrades = {openTrades?.length ?? "undefined"}
+            </div>
+
+            {/* ── OPEN POSITIONS ── */}
+            <div className="space-y-3">
+              {openTrades.length === 0 ? (
               <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
                 style={{ background: C.s1, border: `1px solid ${C.border}` }}>
                 <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
