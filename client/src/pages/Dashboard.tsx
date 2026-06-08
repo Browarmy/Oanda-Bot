@@ -702,25 +702,20 @@ const dailyProfitFactor =
       </div>
     </div>
 
-    <div className="flex justify-between">
-      <span className="text-xs" style={{ color: C.muted }}>
-        {trade.units.toLocaleString()} units
-      </span>
-
-      <span
-        className="text-xs font-bold"
-        style={{ color: isProfit ? C.green : C.red }}
-      >
-        {isProfit ? "+" : ""}
-        {(trade.unrealisedPnl ?? 0).toFixed(2)} {currency}
-      </span>
-    </div>
+          <div className="flex justify-between">
+            <span className="text-xs" style={{ color: C.muted }}>
+              {trade.units.toLocaleString()} units
+            </span>
+            <span className="text-xs font-bold" style={{ color: isProfit ? C.green : C.red }}>
+              {isProfit ? "+" : ""}
+              {(trade.unrealisedPnl ?? 0).toFixed(2)} {currency}
+            </span>
+          </div>
+        </div>
+      );
+    })}
   </div>
-);
-})}
 </div>
-</div>
-)}
 
 {/* ── HISTORY ── */}
 {tab === "history" && (
@@ -737,7 +732,7 @@ const dailyProfitFactor =
     </div>
 
     {bestTrade && worstTrade && (
-      <div className="grid grid-cols-2 gap-3">
+       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.green}33` }}>
           <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Best Trade</p>
           <p className="text-lg font-black font-mono" style={{ color: C.green }}>+£{bestTrade.pnl.toFixed(2)}</p>
@@ -750,6 +745,9 @@ const dailyProfitFactor =
         </div>
       </div>
     )}
+  </div>
+)}
+</div>
 
 
             {/* Backtest link */}
