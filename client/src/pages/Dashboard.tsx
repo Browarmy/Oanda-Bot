@@ -181,7 +181,68 @@ const bestTrade = tradeHist.length > 0
   ? tradeHist.reduce((b: any, t: any) => t.pnl > (b?.pnl ?? -Infinity) ? t : b, null) : null;
 const worstTrade = tradeHist.length > 0
   ? tradeHist.reduce((w: any, t: any) => t.pnl < (w?.pnl ?? Infinity) ? t : w, null) : null;
-// ─────────────────────────────────────────────────────────────
+
+// ─── DAILY PERFORMANCE ──────────────────────────────────────
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const todayTrades = tradeHist.filter((t: any) => {
+  const closeTime =
+    t.closeTime ??
+    t.closedAt ??
+    t.exitTime ??
+    t.timestamp;
+
+  if (!closeTime) return false;
+
+  return new Date(closeTime).getTime() >= today.getTime();
+});
+
+const dailyTrades = todayTrades.length;
+
+const dailyWins = todayTrades.filter((t: any) => t.pnl > 0);
+
+const dailyLosses = todayTrades.filter((t: any) => t.pnl <= 0);
+
+const dailyWinRate =
+  dailyTrades > 0
+    ? (dailyWins.length / dailyTrades) * 100
+    : 0;
+
+const dailyPnl = todayTrades.reduce(
+  (sum: number, t: any) => sum + (t.pnl ?? 0),
+  0
+);
+
+const dailyAvgWin =
+  dailyWins.length > 0
+    ? dailyWins.reduce(
+        (sum: number, t: any) => sum + t.pnl,
+        0
+      ) / dailyWins.length
+    : 0;
+
+const dailyAvgLoss =
+  dailyLosses.length > 0
+    ? Math.abs(
+        dailyLosses.reduce(
+          (sum: number, t: any) => sum + t.pnl,
+          0
+        ) / dailyLosses.length
+      )
+    : 0;
+
+const dailyExpectancy =
+  dailyTrades > 0
+    ? ((dailyWinRate / 100) * dailyAvgWin) -
+      ((1 - dailyWinRate / 100) * dailyAvgLoss)
+    : 0;
+
+const dailyProfitFactor =
+  dailyAvgLoss > 0
+    ? (dailyAvgWin / dailyAvgLoss).toFixed(2)
+    : "—";
+// ────────────────────────────────────────────────────────────
   const isLive = s?.isLive ?? false;
   const isPaused = s?.isPaused ?? false;
   const equityCurve = s?.equityCurve ?? [];
@@ -435,22 +496,24 @@ const worstTrade = tradeHist.length > 0
                 
                 <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
                   <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total Trades</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>36</p>
-                </div>
+                <p className="text-3xl font-black mt-1" style={{ color: C.text }}>
+  {dailyTrades}
+</p>
 
                 <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
                   <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Win Rate</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>52.8%</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>{dailyWinRate.toFixed(1)}% </p>
                 </div>
 
                 <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
                   <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total P&L</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>+£611.38</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>{dailyPnl >= 0 ? "+" : ""}
+£{dailyPnl.toFixed(2)} </p>
                 </div>
 
                 <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
                   <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Expectancy</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>£16.98</p>
+                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>£{dailyExpectancy.toFixed(2)}</p>
                 </div>
               </div>
 
@@ -459,7 +522,10 @@ const worstTrade = tradeHist.length > 0
   style={{ color: C.muted }}
 >
   <div>
-    Profit Factor: <span style={{ color: C.amber }}>1.12</span>
+    Profit Factor:
+<span style={{ color: C.amber }}>
+  {dailyProfitFactor}
+</span>
   </div>
 
   <div>
