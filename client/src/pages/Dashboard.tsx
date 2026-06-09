@@ -187,18 +187,16 @@ const today = new Date();
 today.setHours(0, 0, 0, 0);
 
 const todayTrades = tradeHist.filter((t: any) => {
-  const closeTime =
-    t.closeTime ??
-    t.closedAt ??
-    t.exitTime ??
-    t.timestamp;
+  if (!t.closedAt) return false;
 
-  if (!closeTime) return false;
+  const tradeDate = new Date(t.closedAt);
+  tradeDate.setHours(0, 0, 0, 0);
 
-  return new Date(closeTime).getTime() >= today.getTime();
+  return tradeDate.getTime() === today.getTime();
 });
 
 const dailyTrades = todayTrades.length;
+console.log("TODAY TRADES", todayTrades);
 
 const dailyWins = todayTrades.filter((t: any) => t.pnl > 0);
 
@@ -238,10 +236,23 @@ const dailyExpectancy =
       ((1 - dailyWinRate / 100) * dailyAvgLoss)
     : 0;
 
+const dailyGrossProfit = dailyWins.reduce(
+  (sum: number, t: any) => sum + t.pnl,
+  0
+);
+
+const dailyGrossLoss = Math.abs(
+  dailyLosses.reduce(
+    (sum: number, t: any) => sum + t.pnl,
+    0
+  )
+);
+
 const dailyProfitFactor =
-  dailyAvgLoss > 0
-    ? (dailyAvgWin / dailyAvgLoss).toFixed(2)
+  dailyGrossLoss > 0
+    ? (dailyGrossProfit / dailyGrossLoss).toFixed(2)
     : "—";
+
 // ────────────────────────────────────────────────────────────
   const isLive = s?.isLive ?? false;
   const isPaused = s?.isPaused ?? false;
@@ -477,7 +488,7 @@ const dailyProfitFactor =
           </>
         )}
 
-                                                    {/* ── DAILY STATS + POSITIONS ── */}
+                                {/* ── DAILY STATS + POSITIONS ── */}
         {tab === "positions" && (
           <div className="space-y-6">
 
