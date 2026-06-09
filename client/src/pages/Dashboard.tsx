@@ -737,13 +737,12 @@ const dailyProfitFactor =
             <span className="text-xs font-bold" style={{ color: isProfit ? C.green : C.red }}>
               {isProfit ? "+" : ""}
               {(trade.unrealisedPnl ?? 0).toFixed(2)} {currency}
-            </span>
-          </div>
-        </div>
-      );
+                 </span>
+    </div>
+  </div>
+);
     })}
   </div>
-</div>
 
 {/* ── HISTORY ── */}
 {tab === "history" && (
