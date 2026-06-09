@@ -68,23 +68,42 @@ export interface SignalParams {
 
 export interface TradePattern {
   rsi: number;
-  macd: number;            // positive/negative normalised
-  bbPosition: number;      // 0-1
-  atrNorm: number;         // ATR / price (normalised)
-  emaSpread: number;       // (ema9 - ema21) / ema21
+  macd: number;
+  bbPosition: number;
+  atrNorm: number;
+  emaSpread: number;
   hour: number;
   won: boolean;
   pnl: number;
+  strategy?: string;
+  regime?: string;
+  instrument?: string;
+}
+
+export interface StrategyLearning {
+  strategy: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  score: number;
+  enabled: boolean;
+  lastUpdated: number;
 }
 
 export interface LearningState {
   pairs: Record<string, PairLearning>;
   sessions: SessionLearning[];
+  strategies: Record<string, StrategyLearning>;
   params: SignalParams;
   patterns: TradePattern[];
   totalEvolutions: number;
   lastEvolution: number;
-  insights: string[];      // human-readable insights the bot has learned
+  insights: string[];
 }
 
 // ─── Default state ────────────────────────────────────────────────────────────
@@ -130,6 +149,39 @@ function defaultSessionLearning(hour: number): SessionLearning {
   };
 }
 
+function defaultStrategyLearning(strategy: string): StrategyLearning {
+  return {
+    strategy,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0.5,
+    avgPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: 1.0,
+    score: 0.5,
+    enabled: true,
+    lastUpdated: Date.now(),
+  };
+}
+
+function computeStrategyScore(strategy: StrategyLearning): number {
+  if (strategy.trades < 5) return 0.5;
+
+  const wrScore = strategy.winRate;
+  const pfScore = Math.min(strategy.profitFactor / 2.5, 1);
+  const pnlScore = strategy.avgPnl > 0 ? 0.75 : 0.25;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      wrScore * 0.45 + pfScore * 0.35 + pnlScore * 0.20
+    )
+  );
+}
+
 // ─── Learning Engine ──────────────────────────────────────────────────────────
 
 export class LearningEngine {
@@ -143,16 +195,16 @@ export class LearningEngine {
   private readonly MAX_PATTERNS = 500;
 
   constructor() {
-    this.state = {
-      pairs: {},
-      sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
-      params: { ...DEFAULT_PARAMS },
-      patterns: [],
-      totalEvolutions: 0,
-      lastEvolution: Date.now(),
-      insights: [],
-    };
-  }
+this.state = {
+  pairs: {},
+  sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
+  strategies: {},
+  params: { ...DEFAULT_PARAMS },
+  patterns: [],
+  totalEvolutions: 0,
+  lastEvolution: Date.now(),
+  insights: [],
+};
 
   // ── Persistence ──────────────────────────────────────────────────────────────
 
@@ -167,6 +219,7 @@ export class LearningEngine {
           const parsed = JSON.parse(row.value);
           if (row.key === "pairs") this.state.pairs = parsed;
           if (row.key === "sessions") this.state.sessions = parsed;
+          if (row.key === "strategies") this.state.strategies = parsed;
           if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
           if (row.key === "patterns") this.state.patterns = parsed;
  if (row.key === "meta") {
@@ -200,6 +253,7 @@ export class LearningEngine {
       };
       await upsert("pairs", this.state.pairs);
       await upsert("sessions", this.state.sessions);
+      await upsert("strategies", this.state.strategies);
       await upsert("params", this.state.params);
       await upsert("patterns", this.state.patterns.slice(-this.MAX_PATTERNS));
 await upsert("meta", {
@@ -231,6 +285,8 @@ await upsert("meta", {
     ema21: number;
     openTime: number;
     closedAt: number;
+    strategy?: string;
+    regime?: string;
   }) {
     const hour = new Date(trade.openTime).getUTCHours();
 
@@ -297,19 +353,66 @@ await upsert("meta", {
     }
     sess.lastUpdated = Date.now();
 
+// 2b. Update strategy learning
+const strategyName = trade.strategy ?? "UNKNOWN";
+
+if (!this.state.strategies[strategyName]) {
+  this.state.strategies[strategyName] = defaultStrategyLearning(strategyName);
+}
+
+const strat = this.state.strategies[strategyName];
+strat.trades++;
+
+if (trade.won) {
+  strat.wins++;
+  strat.grossProfit += Math.max(0, trade.pnl);
+} else {
+  strat.losses++;
+  strat.grossLoss += Math.abs(Math.min(0, trade.pnl));
+}
+
+strat.winRate = strat.wins / Math.max(1, strat.trades);
+strat.avgPnl = ema1([strat.avgPnl, trade.pnl], 0.2);
+strat.profitFactor =
+  strat.grossLoss > 0
+    ? strat.grossProfit / strat.grossLoss
+    : strat.grossProfit > 0
+      ? 99
+      : 1;
+
+strat.score = computeStrategyScore(strat);
+strat.lastUpdated = Date.now();
+
+if (strat.trades >= 10 && strat.score < 0.35 && strat.enabled) {
+  strat.enabled = false;
+  this.addInsight(
+    `🚫 Strategy ${strategyName} disabled — score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}%`
+  );
+}
+
+if (strat.trades >= 10 && strat.score >= 0.45 && !strat.enabled) {
+  strat.enabled = true;
+  this.addInsight(
+    `✅ Strategy ${strategyName} re-enabled — score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}%`
+  );
+}
+
     // 3. Store pattern
     const atrNorm = trade.entryPrice > 0 ? trade.atr / trade.entryPrice : 0;
     const emaSpread = trade.ema21 > 0 ? (trade.ema9 - trade.ema21) / trade.ema21 : 0;
     this.state.patterns.push({
-      rsi: trade.rsi,
-      macd: trade.macd,
-      bbPosition: trade.bbPosition,
-      atrNorm,
-      emaSpread,
-      hour,
-      won: trade.won,
-      pnl: trade.pnl,
-    });
+  rsi: trade.rsi,
+  macd: trade.macd,
+  bbPosition: trade.bbPosition,
+  atrNorm,
+  emaSpread,
+  hour,
+  won: trade.won,
+  pnl: trade.pnl,
+  strategy: trade.strategy ?? "UNKNOWN",
+  regime: trade.regime ?? "UNKNOWN",
+  instrument: trade.instrument,
+});
     if (this.state.patterns.length > this.MAX_PATTERNS) {
       this.state.patterns.shift();
     }
@@ -447,6 +550,23 @@ return true;
       .sort((a, b) => b.score - a.score)
       .slice(0, n);
   }
+
+getStrategyLearning(strategy: string): StrategyLearning {
+  return this.state.strategies[strategy] ?? defaultStrategyLearning(strategy);
+}
+
+isStrategyEnabled(strategy: string): boolean {
+  const s = this.state.strategies[strategy];
+  if (!s) return true;
+  return s.enabled;
+}
+
+getTopStrategies(n = 5): StrategyLearning[] {
+  return Object.values(this.state.strategies)
+    .filter(s => s.trades >= 3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n);
+}
 
   getWorstPairs(n = 5): PairLearning[] {
     return Object.values(this.state.pairs)
