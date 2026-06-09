@@ -1342,7 +1342,16 @@ if (cutoff > 0) {
       this.openTradeSnapshots.set(tradeId, {
         ...this.openTradeSnapshots.get(tradeId)!,
         // @ts-ignore
-        _signal: { rsi: finalRsi, macd: finalMacd, bbPosition: finalBbPos, atr: finalAtr, ema9: finalEma9, ema21: finalEma21, regime: regime.regime },
+_signal: {
+  rsi: finalRsi,
+  macd: finalMacd,
+  bbPosition: finalBbPos,
+  atr: finalAtr,
+  ema9: finalEma9,
+  ema21: finalEma21,
+  regime: regime.regime,
+  strategy: stratSignal.strategy,
+},
       });
 
       // ── Walk-forward optimiser: run every 30 trades ───────────────────────────
@@ -1438,7 +1447,9 @@ if (cutoff > 0) {
           ema9: snapSignal.ema9 ?? entryPrice,
           ema21: snapSignal.ema21 ?? entryPrice,
           openTime: closed.openTime,
-          closedAt: closed.closedAt,
+closedAt: closed.closedAt,
+strategy: snapSignal.strategy ?? "UNKNOWN",
+regime: snapSignal.regime ?? "UNKNOWN",
         });
 
   // === LEARNING EVOLUTION STATUS ===
