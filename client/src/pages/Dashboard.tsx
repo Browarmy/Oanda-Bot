@@ -743,6 +743,7 @@ const dailyProfitFactor =
 );
     })}
   </div>
+)}
 
 {/* ── HISTORY ── */}
 {tab === "history" && (
@@ -775,6 +776,7 @@ const dailyProfitFactor =
   </div>
 )}
 </div>
+)}
 
 
             {/* Backtest link */}
