@@ -136,7 +136,8 @@ export class LearningEngine {
   private state: LearningState;
   private dirty = false;
   private saveTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly EVOLUTION_MIN_TRADES = 20;  // evolve params after N trades
+  private readonly EVOLUTION_MIN_TRADES = 20;  // evolve params after N new learned trades
+  private lastEvolutionTradeCount = 0;
   private readonly PAIR_DISABLE_THRESHOLD = 0.35;  // disable pair if win rate < 35%
   private readonly PAIR_ENABLE_THRESHOLD = 0.45;   // re-enable if win rate recovers to 45%
   private readonly MAX_PATTERNS = 500;
@@ -168,11 +169,12 @@ export class LearningEngine {
           if (row.key === "sessions") this.state.sessions = parsed;
           if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
           if (row.key === "patterns") this.state.patterns = parsed;
-          if (row.key === "meta") {
-            this.state.totalEvolutions = parsed.totalEvolutions ?? 0;
-            this.state.lastEvolution = parsed.lastEvolution ?? Date.now();
-            this.state.insights = parsed.insights ?? [];
-          }
+ if (row.key === "meta") {
+  this.state.totalEvolutions = parsed.totalEvolutions ?? 0;
+  this.state.lastEvolution = parsed.lastEvolution ?? Date.now();
+  this.state.insights = parsed.insights ?? [];
+  this.lastEvolutionTradeCount = parsed.lastEvolutionTradeCount ?? 0;
+}
         } catch { /* skip malformed */ }
       }
       console.log(`[Learning] Loaded state: ${Object.keys(this.state.pairs).length} pairs, ${this.state.patterns.length} patterns, v${this.state.params.version}`);
@@ -200,11 +202,12 @@ export class LearningEngine {
       await upsert("sessions", this.state.sessions);
       await upsert("params", this.state.params);
       await upsert("patterns", this.state.patterns.slice(-this.MAX_PATTERNS));
-      await upsert("meta", {
-        totalEvolutions: this.state.totalEvolutions,
-        lastEvolution: this.state.lastEvolution,
-        insights: this.state.insights.slice(-50),
-      });
+await upsert("meta", {
+  totalEvolutions: this.state.totalEvolutions,
+  lastEvolution: this.state.lastEvolution,
+  lastEvolutionTradeCount: this.lastEvolutionTradeCount,
+  insights: this.state.insights.slice(-50),
+});
       this.dirty = false;
     } catch (e: any) {
       console.log(`[Learning] Save failed: ${e.message}`);
@@ -313,23 +316,38 @@ export class LearningEngine {
 
     this.dirty = true;
 
-    // 4. Evolve parameters if enough new trades
-    const totalTrades = Object.values(this.state.pairs).reduce((s, p) => s + p.trades, 0);
-    if (totalTrades > 0 && totalTrades % this.EVOLUTION_MIN_TRADES === 0) {
-      this.evolveParams();
-    }
+// 4. Evolve parameters reliably after enough NEW learned trades.
+// Do not use modulo. Modulo can miss evolution after restarts or skipped events.
+const totalTrades = this.getTotalLearnedTrades();
+const tradesSinceEvolution = totalTrades - this.lastEvolutionTradeCount;
+
+if (tradesSinceEvolution >= this.EVOLUTION_MIN_TRADES) {
+  this.evolve("auto");
+}
   }
 
   // ── Parameter evolution — the core "self-learning" ───────────────────────
 
-  private evolveParams() {
-    const patterns = this.state.patterns;
-    if (patterns.length < 15) return;
+public evolve(reason: "auto" | "manual" | "startup" = "manual"): boolean {
+const patterns = this.state.patterns;
+const totalTrades = this.getTotalLearnedTrades();
 
-    const wins = patterns.filter(p => p.won);
-    const losses = patterns.filter(p => !p.won);
-    if (wins.length < 5 || losses.length < 5) return;
+if (patterns.length < 15) {
+  this.addInsight(`⚠ Evolution skipped (${reason}) — only ${patterns.length}/15 patterns available`);
+  console.log(`[Learning] Evolution skipped (${reason}) — only ${patterns.length}/15 patterns available`);
+  return false;
+}
 
+const wins = patterns.filter(p => p.won);
+const losses = patterns.filter(p => !p.won);
+
+if (wins.length < 5 || losses.length < 5) {
+  this.addInsight(`⚠ Evolution skipped (${reason}) — needs at least 5 wins and 5 losses. Current: ${wins.length}W/${losses.length}L`);
+  console.log(`[Learning] Evolution skipped (${reason}) — insufficient win/loss mix: ${wins.length}W/${losses.length}L`);
+  this.lastEvolutionTradeCount = totalTrades;
+  this.dirty = true;
+  return false;
+}
     const prev = { ...this.state.params };
     const p = this.state.params;
 
@@ -387,7 +405,9 @@ export class LearningEngine {
     const insight = `🧠 Evolution v${p.version}: ${rsiChange} | ${slChange} | ${confChange} | WR ${(overallWinRate * 100).toFixed(0)}% | Best hours: ${bestHours.slice(0, 4).join(',')}h UTC`;
     this.addInsight(insight);
     console.log(`[Learning] ${insight}`);
-    this.dirty = true;
+this.lastEvolutionTradeCount = totalTrades;
+this.dirty = true;
+return true;
   }
 
   // ── Getters used by the engine ────────────────────────────────────────────
@@ -441,6 +461,27 @@ export class LearningEngine {
       .sort((a, b) => b.winRate - a.winRate)
       .slice(0, 6);
   }
+
+getTotalLearnedTrades(): number {
+  return Object.values(this.state.pairs).reduce((sum, pair) => sum + pair.trades, 0);
+}
+
+getEvolutionStatus() {
+  const totalTrades = this.getTotalLearnedTrades();
+  const tradesSinceEvolution = totalTrades - this.lastEvolutionTradeCount;
+  const tradesRemaining = Math.max(0, this.EVOLUTION_MIN_TRADES - tradesSinceEvolution);
+
+  return {
+    totalLearnedTrades: totalTrades,
+    lastEvolutionTradeCount: this.lastEvolutionTradeCount,
+    tradesSinceEvolution,
+    tradesRemaining,
+    evolutionInterval: this.EVOLUTION_MIN_TRADES,
+    currentVersion: this.state.params.version,
+    totalEvolutions: this.state.totalEvolutions,
+    lastEvolution: this.state.lastEvolution,
+  };
+}
 
   private addInsight(msg: string) {
     this.state.insights.unshift(`[${new Date().toISOString().slice(0, 16)}] ${msg}`);
