@@ -672,6 +672,15 @@ export class AutonomousEngine extends EventEmitter {
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
+    const evoStatus = learningEngine.getEvolutionStatus?.();
+    if (evoStatus) {
+    this.log(
+    `🧬 Learning status: v${evoStatus.currentVersion} | ` +
+    `${evoStatus.totalLearnedTrades} learned trades | ` +
+    `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} toward next evolution`
+  );
+}
+
 
         try {
       const acct = await this.api.getAccount();
@@ -1432,22 +1441,18 @@ if (cutoff > 0) {
           closedAt: closed.closedAt,
         });
 
-                // === LEARNING EVOLUTION FIX — Reliable Trigger ===
-        if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 4) {
-          this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
-          
-          await learningEngine.evolve?.();   // Safe call
-          
-          const lp = learningEngine.getParams();
-          this.state.config.rsiLower = lp.rsiLower;
-          this.state.config.rsiUpper = lp.rsiUpper;
-          this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
-          this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
-          this.state.config.minConfidence = lp.minConfidence;
-          
-          this.tradesSinceWalkForward = 0;
-          this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
-        }
+  // === LEARNING EVOLUTION STATUS ===
+// Evolution is now handled inside learningEngine.recordTrade()
+// using reliable "trades since last evolution" logic.
+const evoStatus = learningEngine.getEvolutionStatus?.();
+
+if (evoStatus) {
+  this.log(
+    `🧬 Evolution status: v${evoStatus.currentVersion} | ` +
+    `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} trades since last evolution | ` +
+    `${evoStatus.tradesRemaining} remaining`
+  );
+}
 
         // Apply any evolved params back to config
         const lp = learningEngine.getParams();
