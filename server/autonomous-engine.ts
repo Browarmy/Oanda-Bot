@@ -37,6 +37,7 @@ import {
   type MarketRegime,
   type WalkForwardResult,
 } from "./strategy-engine";
+import { analysePortfolioIntelligence } from "./portfolio-intelligence";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1322,6 +1323,46 @@ if (cutoff > 0) {
         }
       }
       const units = calculateUnits(this.state.accountBalance, effectiveRiskPct, slDist, pairStat.instrument);
+// ── PORTFOLIO INTELLIGENCE V1 ───────────────────────────────────────────────
+// Final portfolio-level approval before sending the order.
+// This checks projected heat, currency exposure, and crowded same-direction bets.
+const portfolioCheck = analysePortfolioIntelligence(
+  openTrades.map(t => ({
+    instrument: t.instrument,
+    direction: t.direction,
+    units: t.units,
+    entryPrice: t.entryPrice,
+    stopLoss: t.stopLoss,
+  })),
+  {
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    units,
+    entryPrice: entry,
+    stopLoss: sl,
+  },
+  this.state.accountEquity,
+  {
+    maxPortfolioHeatPct: 4.0,
+    maxSingleCurrencyExposurePct: 250,
+    maxSameCurrencyDirectionalTrades: 2,
+  }
+);
+
+if (!portfolioCheck.approved) {
+  this.log(
+    `🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioCheck.reason
+  );
+  return;
+}
+
+this.portfolioHeat = portfolioCheck.projectedHeatPct;
+
+this.log(
+  `🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ` +
+  portfolioCheck.reason
+);
 
       const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
       pairStat.lastTrade = Date.now();
