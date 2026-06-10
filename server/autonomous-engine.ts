@@ -1344,16 +1344,6 @@ if (crossMarket.confidenceAdjustment !== 0) {
 
 // ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
 let effectiveRiskPct = cfg.riskPercent;
-if (crossMarket.riskMultiplier < 1) {
-  const beforeRisk = effectiveRiskPct;
-  effectiveRiskPct *= crossMarket.riskMultiplier;
-
-  this.log(
-    `🌍 CROSS-MARKET RISK: ${pairStat.instrument} ${finalAction} — ` +
-    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
-    crossMarket.reason
-  );
-}
 const recentTrades = this.state.tradeHistory.slice(-30);
 
 if (recentTrades.length >= 15) {
@@ -1371,7 +1361,6 @@ if (recentTrades.length >= 15) {
     effectiveRiskPct = fractionalKelly * 100;
 
     const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
-
     if (recentLosses >= 4) effectiveRiskPct *= 0.5;
     else if (recentLosses >= 3) effectiveRiskPct *= 0.7;
 
@@ -1393,7 +1382,6 @@ const metaApproval = evaluateMetaApproval({
   regime: metaRegime,
   confidence: finalConfidence,
   baseRiskPct: effectiveRiskPct,
-
   pairLearning: learningEngine.getPairLearning(pairStat.instrument),
   strategyLearning: learningEngine.getStrategyLearning?.(metaStrategy),
   regimeLearning: learningEngine.getRegimeLearning?.(metaRegime),
@@ -1401,31 +1389,20 @@ const metaApproval = evaluateMetaApproval({
 });
 
 if (!metaApproval.approved) {
-  this.log(
-    `🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ` +
-    metaApproval.reason
-  );
+  this.log(`🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ${metaApproval.reason}`);
   return;
 }
 
 if (metaApproval.riskMultiplier < 1) {
   const beforeRisk = effectiveRiskPct;
-
-  effectiveRiskPct = Math.max(
-    0.25,
-    effectiveRiskPct * metaApproval.riskMultiplier
-  );
+  effectiveRiskPct = Math.max(0.25, effectiveRiskPct * metaApproval.riskMultiplier);
 
   this.log(
     `🧠 META RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
-    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
-    metaApproval.reason
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ${metaApproval.reason}`
   );
 } else {
-  this.log(
-    `🧠 META OK: ${pairStat.instrument} ${finalAction} — ` +
-    metaApproval.reason
-  );
+  this.log(`🧠 META OK: ${pairStat.instrument} ${finalAction} — ${metaApproval.reason}`);
 }
 
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
@@ -1488,18 +1465,39 @@ const portfolioCheck = analysePortfolioIntelligence(
 );
 
 if (!portfolioCheck.approved) {
-  this.log(
-    `🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
-    portfolioCheck.reason
-  );
+  this.log(`🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ${portfolioCheck.reason}`);
   return;
 }
 
 this.portfolioHeat = portfolioCheck.projectedHeatPct;
 
+this.log(`🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ${portfolioCheck.reason}`);
+
+const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
+
+pairStat.lastTrade = Date.now();
+this.state.totalTrades++;
+this.state.openTradesCount++;
+this.tradesSinceWalkForward++;
+
+this.openTradeSnapshots.set(tradeId, {
+  id: tradeId,
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  units,
+  entryPrice: entry,
+  stopLoss: sl,
+  takeProfit: tp,
+  openTime: Date.now(),
+  unrealisedPnl: 0,
+});
+
+const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
+
 this.log(
-  `🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ` +
-  portfolioCheck.reason
+  `✅ ${finalAction} ${pairStat.instrument} [${regime.regime}] | ` +
+  `${units.toLocaleString()} units | SL ${sl.toFixed(dp)} TP ${tp.toFixed(dp)} | ` +
+  `RR ${(reward / slDist).toFixed(1)} | ${finalReason}`
 );
 
 // Telegram notification — fire and forget
