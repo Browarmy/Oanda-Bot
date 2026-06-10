@@ -390,6 +390,16 @@ getLearningInsights: publicProcedure.query(() => {
     sessions: state.sessions ?? [],
     strategies: state.strategies ?? {},
     confidenceBuckets: state.confidenceBuckets ?? {},
+return {
+  insights: state.insights ?? [],
+  pairs: state.pairs ?? {},
+  sessions: state.sessions ?? [],
+  strategies: state.strategies ?? {},
+  confidenceBuckets: state.confidenceBuckets ?? {},
+  regimes: state.regimes ?? {},
+  params: state.params ?? {},
+  totalEvolutions: state.totalEvolutions ?? 0,
+};
     params: state.params ?? {},
     totalEvolutions: state.totalEvolutions ?? 0,
   };
