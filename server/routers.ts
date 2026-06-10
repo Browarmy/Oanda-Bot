@@ -401,6 +401,12 @@ return {
   params: state.params ?? {},
   totalEvolutions: state.totalEvolutions ?? 0,
 };
+getDecisionJournal: publicProcedure.query(() => {
+  return {
+    summary: decisionJournal.getSummary(),
+    recent: decisionJournal.getRecent(50),
+  };
+}),
     params: state.params ?? {},
     totalEvolutions: state.totalEvolutions ?? 0,
   };
