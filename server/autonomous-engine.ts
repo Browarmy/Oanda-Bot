@@ -41,6 +41,7 @@ import { analysePortfolioIntelligence } from "./portfolio-intelligence";
 import { evaluateMetaApproval } from "./meta-approval";
 import { calculateDynamicRisk } from "./dynamic-risk";
 import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
+import { decisionJournal } from "./decision-journal";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1389,7 +1390,28 @@ const metaApproval = evaluateMetaApproval({
 });
 
 if (!metaApproval.approved) {
-  this.log(`🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ${metaApproval.reason}`);
+  this.log(
+    `🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    metaApproval.reason
+  );
+
+await decisionJournal.record({
+  type: "RISK_REDUCED",
+  stage: "META",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: metaApproval.reason,
+  extra: {
+    riskMultiplier: metaApproval.riskMultiplier,
+    components: metaApproval.components,
+  },
+});
+
   return;
 }
 
@@ -1403,6 +1425,7 @@ if (metaApproval.riskMultiplier < 1) {
   );
 } else {
   this.log(`🧠 META OK: ${pairStat.instrument} ${finalAction} — ${metaApproval.reason}`);
+h
 }
 
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
@@ -1433,6 +1456,22 @@ this.log(
   `${effectiveRiskPct.toFixed(2)}% | ${dynamicRisk.reason}`
 );
 
+await decisionJournal.record({
+  type: dynamicRisk.multiplier < 1 ? "RISK_REDUCED" : "APPROVED",
+  stage: "DYNAMIC_RISK",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: dynamicRisk.reason,
+  extra: {
+    multiplier: dynamicRisk.multiplier,
+    currentDrawdownPct,
+  },
+});
 const units = calculateUnits(
   this.state.accountBalance,
   effectiveRiskPct,
@@ -1465,7 +1504,31 @@ const portfolioCheck = analysePortfolioIntelligence(
 );
 
 if (!portfolioCheck.approved) {
-  this.log(`🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ${portfolioCheck.reason}`);
+  this.log(
+    `🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioCheck.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "PORTFOLIO",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: portfolioCheck.reason,
+    extra: {
+      currentHeatPct: portfolioCheck.currentHeatPct,
+      projectedHeatPct: portfolioCheck.projectedHeatPct,
+      proposedRiskPct: portfolioCheck.proposedRiskPct,
+      currencyExposurePct: portfolioCheck.currencyExposurePct,
+      directionalCounts: portfolioCheck.directionalCounts,
+    },
+  });
+
   return;
 }
 
@@ -1474,6 +1537,26 @@ this.portfolioHeat = portfolioCheck.projectedHeatPct;
 this.log(`🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ${portfolioCheck.reason}`);
 
 const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
+await decisionJournal.record({
+  type: "EXECUTED",
+  stage: "EXECUTION",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: finalReason,
+  extra: {
+    tradeId,
+    units,
+    entry,
+    stopLoss: sl,
+    takeProfit: tp,
+    portfolioHeat: portfolioCheck.projectedHeatPct,
+  },
+});
 
 pairStat.lastTrade = Date.now();
 this.state.totalTrades++;
