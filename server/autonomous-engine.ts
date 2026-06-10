@@ -40,6 +40,7 @@ import {
 import { analysePortfolioIntelligence } from "./portfolio-intelligence";
 import { evaluateMetaApproval } from "./meta-approval";
 import { calculateDynamicRisk } from "./dynamic-risk";
+import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1137,6 +1138,47 @@ if (cutoff > 0) {
         return;
       }
 
+// ── CROSS-MARKET INTELLIGENCE V1 ───────────────────────────────────────────
+// Checks hidden currency-theme concentration before confidence/risk sizing.
+const crossMarket = analyseCrossMarketIntelligence(
+  openTrades.map(t => ({
+    instrument: t.instrument,
+    direction: t.direction,
+  })),
+  {
+    instrument: pairStat.instrument,
+    direction: finalAction,
+  }
+);
+
+if (!crossMarket.approved) {
+  this.log(
+    `🌍 CROSS-MARKET BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    crossMarket.reason
+  );
+  return;
+}
+
+if (crossMarket.confidenceAdjustment !== 0) {
+  const beforeConfidence = finalConfidence;
+
+  finalConfidence = Math.max(
+    0,
+    Math.min(0.99, finalConfidence + crossMarket.confidenceAdjustment)
+  );
+
+  this.log(
+    `🌍 CROSS-MARKET ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${(beforeConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+    crossMarket.reason
+  );
+} else {
+  this.log(
+    `🌍 CROSS-MARKET OK: ${pairStat.instrument} ${finalAction} — ` +
+    crossMarket.reason
+  );
+}
+
       // ── NEWS GUARD — block 30min before / 15min after high-impact events ────────
       const newsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
       if (newsCheck.blocked) {
@@ -1302,6 +1344,16 @@ if (cutoff > 0) {
 
 // ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
 let effectiveRiskPct = cfg.riskPercent;
+if (crossMarket.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+  effectiveRiskPct *= crossMarket.riskMultiplier;
+
+  this.log(
+    `🌍 CROSS-MARKET RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    crossMarket.reason
+  );
+}
 const recentTrades = this.state.tradeHistory.slice(-30);
 
 if (recentTrades.length >= 15) {
