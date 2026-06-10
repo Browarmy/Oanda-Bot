@@ -24,6 +24,7 @@ import { autonomousEngine } from "./autonomous-engine";
 import { learningEngine } from "./learning-engine";
 import { runBacktest } from "./backtest-engine";
 import { decisionJournal } from "./decision-journal";
+import { analyseDecisions } from "./decision-analytics";
 import { configureTelegram, getTelegramConfig } from "./telegram-notifier";
 
 const multiBotManager = new MultiBotManager();
@@ -401,9 +402,14 @@ return {
   params: state.params ?? {},
   totalEvolutions: state.totalEvolutions ?? 0,
 };
-getDecisionJournal: publicProcedure.query(() => {
+getDecisionJournal: publicProcedure.query(async () => {
+  await decisionJournal.load();
+
+  const all = decisionJournal.getAll();
+
   return {
-    summary: decisionJournal.getSummary(),
+    summary: decisionJournal.getStats(),
+    analytics: analyseDecisions(all),
     recent: decisionJournal.getRecent(50),
   };
 }),
