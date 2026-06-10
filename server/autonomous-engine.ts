@@ -84,6 +84,8 @@ export interface ClosedTrade {
   pips: number;
   won: boolean;
   closeReason: string;
+  regime?: string;
+  strategy?: string;
 }
 
 export interface OpenTrade {
@@ -1406,15 +1408,25 @@ _signal: {
         else if (snap?.takeProfit && direction === "SELL" && exitPrice <= snap.takeProfit + pipSize * 3) closeReason = "TP";
         else if (snap?.stopLoss && direction === "BUY" && exitPrice <= snap.stopLoss + pipSize * 3) closeReason = "SL";
         else if (snap?.stopLoss && direction === "SELL" && exitPrice >= snap.stopLoss - pipSize * 3) closeReason = "SL";
-        const closed: ClosedTrade = {
-          id: prevId, instrument, direction,
-          units: snap?.units ?? Math.abs(parseFloat(t.initialUnits ?? "0")),
-          entryPrice, exitPrice,
-          stopLoss: snap?.stopLoss ?? 0, takeProfit: snap?.takeProfit ?? 0,
-          openTime: snap?.openTime ?? new Date(t.openTime).getTime(),
-          closedAt: t.closeTime ? new Date(t.closeTime).getTime() : Date.now(),
-          pnl, pips: parseFloat(pips.toFixed(1)), won, closeReason,
-        };
+
+const closed: ClosedTrade = {
+  id: prevId,
+  instrument,
+  direction,
+  units: snap?.units ?? Math.abs(parseFloat(t.initialUnits ?? "0")),
+  entryPrice,
+  exitPrice,
+  stopLoss: snap?.stopLoss ?? 0,
+  takeProfit: snap?.takeProfit ?? 0,
+  openTime: snap?.openTime ?? new Date(t.openTime).getTime(),
+  closedAt: t.closeTime ? new Date(t.closeTime).getTime() : Date.now(),
+  pnl,
+  pips: parseFloat(pips.toFixed(1)),
+  won,
+  closeReason,
+  regime: snapSignal.regime ?? "UNKNOWN",
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+};
         this.state.tradeHistory.unshift(closed);
         if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.pop();
         if (won) this.state.totalWins++; else this.state.totalLosses++;
@@ -1433,24 +1445,24 @@ _signal: {
             
         // Feed closed trade to learning engine
         const snapSignal = (snap as any)?._signal ?? {};
-        learningEngine.recordTrade({
-          instrument,
-          direction,
-          won,
-          pnl,
-          pips: closed.pips,
-          rsi: snapSignal.rsi ?? 50,
-          macd: snapSignal.macd ?? 0,
-          bbPosition: snapSignal.bbPosition ?? 0.5,
-          atr: snapSignal.atr ?? 0,
-          entryPrice,
-          ema9: snapSignal.ema9 ?? entryPrice,
-          ema21: snapSignal.ema21 ?? entryPrice,
-          openTime: closed.openTime,
-closedAt: closed.closedAt,
-strategy: snapSignal.strategy ?? "UNKNOWN",
-regime: snapSignal.regime ?? "UNKNOWN",
-        });
+       learningEngine.recordTrade({
+  instrument,
+  direction,
+  won,
+  pnl,
+  pips: closed.pips,
+  rsi: snapSignal.rsi ?? 50,
+  macd: snapSignal.macd ?? 0,
+  bbPosition: snapSignal.bbPosition ?? 0.5,
+  atr: snapSignal.atr ?? 0,
+  entryPrice,
+  ema9: snapSignal.ema9 ?? entryPrice,
+  ema21: snapSignal.ema21 ?? entryPrice,
+  openTime: closed.openTime,
+  closedAt: closed.closedAt,
+  regime: snapSignal.regime ?? "UNKNOWN",
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+});
 
   // === LEARNING EVOLUTION STATUS ===
 // Evolution is now handled inside learningEngine.recordTrade()
