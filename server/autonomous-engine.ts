@@ -672,6 +672,7 @@ export class AutonomousEngine extends EventEmitter {
     this.log("🚀 Bot v4 STARTED — quality signals, 1% risk, max 3 trades");
     // Load persisted learning state from DB
     await learningEngine.load();
+    await decisionJournal.load();
     const lp = learningEngine.getParams();
     this.state.config.rsiLower = lp.rsiLower;
     this.state.config.rsiUpper = lp.rsiUpper;
@@ -1390,10 +1391,28 @@ const metaApproval = evaluateMetaApproval({
 });
 
 if (!metaApproval.approved) {
+  decisionJournal.record({
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    action: "BLOCKED",
+    layer: "META",
+    reason: metaApproval.reason,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    extra: {
+      components: metaApproval.components,
+    },
+  });
+
   this.log(
     `🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     metaApproval.reason
   );
+
+  return;
+}
 
 await decisionJournal.record({
   type: "RISK_REDUCED",
@@ -1417,16 +1436,37 @@ await decisionJournal.record({
 
 if (metaApproval.riskMultiplier < 1) {
   const beforeRisk = effectiveRiskPct;
-  effectiveRiskPct = Math.max(0.25, effectiveRiskPct * metaApproval.riskMultiplier);
+
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * metaApproval.riskMultiplier
+  );
+
+  decisionJournal.record({
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    action: "RISK_REDUCED",
+    layer: "META",
+    reason: metaApproval.reason,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    riskMultiplier: metaApproval.riskMultiplier,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    extra: {
+      beforeRiskPct: beforeRisk,
+      afterRiskPct: effectiveRiskPct,
+      components: metaApproval.components,
+    },
+  });
 
   this.log(
     `🧠 META RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
-    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ${metaApproval.reason}`
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    metaApproval.reason
   );
 } else {
-  this.log(`🧠 META OK: ${pairStat.instrument} ${finalAction} — ${metaApproval.reason}`);
-h
-}
 
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
 const equityPeak = Math.max(
@@ -1450,6 +1490,26 @@ const dynamicRisk = calculateDynamicRisk({
 });
 
 effectiveRiskPct = dynamicRisk.finalRiskPct;
+
+if (dynamicRisk.multiplier < 1) {
+  decisionJournal.record({
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    action: "RISK_REDUCED",
+    layer: "DYNAMIC_RISK",
+    reason: dynamicRisk.reason,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    riskMultiplier: dynamicRisk.multiplier,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    extra: {
+      currentDrawdownPct,
+      components: metaApproval.components,
+    },
+  });
+}
 
 this.log(
   `🎯 DYNAMIC RISK: ${pairStat.instrument} ${finalAction} — ` +
@@ -1504,10 +1564,33 @@ const portfolioCheck = analysePortfolioIntelligence(
 );
 
 if (!portfolioCheck.approved) {
+  decisionJournal.record({
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    action: "BLOCKED",
+    layer: "PORTFOLIO",
+    reason: portfolioCheck.reason,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    portfolioHeatPct: portfolioCheck.currentHeatPct,
+    projectedHeatPct: portfolioCheck.projectedHeatPct,
+    extra: {
+      proposedRiskPct: portfolioCheck.proposedRiskPct,
+      currencyExposurePct: portfolioCheck.currencyExposurePct,
+      directionalCounts: portfolioCheck.directionalCounts,
+    },
+  });
+
   this.log(
     `🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     portfolioCheck.reason
   );
+
+  return;
+}
 
   await decisionJournal.record({
     type: "BLOCKED",
@@ -1535,6 +1618,31 @@ if (!portfolioCheck.approved) {
 this.portfolioHeat = portfolioCheck.projectedHeatPct;
 
 this.log(`🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ${portfolioCheck.reason}`);
+
+decisionJournal.record({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  action: "APPROVED",
+  layer: "EXECUTION",
+  reason: "Trade approved by meta, dynamic risk and portfolio layers",
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  riskMultiplier: dynamicRisk.multiplier,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  portfolioHeatPct: portfolioCheck.currentHeatPct,
+  projectedHeatPct: portfolioCheck.projectedHeatPct,
+  extra: {
+    units,
+    entry,
+    sl,
+    tp,
+    rr: reward / slDist,
+    dynamicRisk,
+    metaComponents: metaApproval.components,
+  },
+});
 
 const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
 await decisionJournal.record({
