@@ -185,6 +185,64 @@ function defaultStrategyLearning(strategy: string): StrategyLearning {
   };
 }
 
+function getConfidenceBucketName(confidence: number): string {
+  const pct = Math.max(0, Math.min(99, Math.floor(confidence * 100)));
+  const bucketStart = Math.floor(pct / 10) * 10;
+  const bucketEnd = bucketStart + 10;
+  return `${bucketStart}-${bucketEnd}`;
+}
+
+function defaultConfidenceBucket(bucket: string): ConfidenceBucketLearning {
+  const [minRaw, maxRaw] = bucket.split("-").map(Number);
+
+  return {
+    bucket,
+    minConfidence: minRaw / 100,
+    maxConfidence: maxRaw / 100,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0.5,
+    avgPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: 1.0,
+    calibratedScore: 0.5,
+    lastUpdated: Date.now(),
+  };
+}
+
+function computeConfidenceCalibrationScore(
+  bucket: ConfidenceBucketLearning
+): number {
+  if (bucket.trades < 5) return 0.5;
+
+  const expectedMidpoint =
+    (bucket.minConfidence + bucket.maxConfidence) / 2;
+
+  const accuracyGap =
+    Math.abs(bucket.winRate - expectedMidpoint);
+
+  const reliabilityScore =
+    Math.max(0, 1 - accuracyGap * 2);
+
+  const pfScore =
+    Math.min(bucket.profitFactor / 2.5, 1);
+
+  const pnlScore =
+    bucket.avgPnl > 0 ? 0.75 : 0.25;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      reliabilityScore * 0.45 +
+      pfScore * 0.35 +
+      pnlScore * 0.20
+    )
+  );
+}
+
 function computeStrategyScore(strategy: StrategyLearning): number {
   if (strategy.trades < 5) return 0.5;
 
