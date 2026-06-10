@@ -1353,6 +1353,7 @@ _signal: {
   ema21: finalEma21,
   regime: regime.regime,
   strategy: stratSignal.strategy,
+  confidence: finalConfidence,
 },
       });
 
@@ -1445,7 +1446,7 @@ const closed: ClosedTrade = {
             
         // Feed closed trade to learning engine
         const snapSignal = (snap as any)?._signal ?? {};
-       learningEngine.recordTrade({
+learningEngine.recordTrade({
   instrument,
   direction,
   won,
@@ -1462,6 +1463,7 @@ const closed: ClosedTrade = {
   closedAt: closed.closedAt,
   regime: snapSignal.regime ?? "UNKNOWN",
   strategy: snapSignal.strategy ?? "UNKNOWN",
+  confidence: snapSignal.confidence ?? 0,
 });
 
   // === LEARNING EVOLUTION STATUS ===
