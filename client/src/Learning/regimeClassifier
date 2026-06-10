@@ -1,0 +1,23 @@
+export function classifyRegime(
+  atr: number,
+  emaFast: number,
+  emaSlow: number,
+  price: number
+) {
+  const trendStrength =
+    Math.abs(emaFast - emaSlow) / price;
+
+  if (atr > price * 0.01) {
+    return "VOLATILE";
+  }
+
+  if (trendStrength > 0.003) {
+    return "TRENDING";
+  }
+
+  if (trendStrength < 0.001) {
+    return "RANGING";
+  }
+
+  return "BREAKOUT";
+}
