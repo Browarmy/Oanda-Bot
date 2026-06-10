@@ -382,16 +382,18 @@ export const appRouter = router({
     }),
 
     // Get learning insights (human-readable)
-    getLearningInsights: publicProcedure.query(() => {
-      const state = learningEngine.getState();
-      return {
-        insights: state.insights ?? [],
-        pairs: state.pairs ?? {},
-        sessions: state.sessions ?? [],
-        params: state.params ?? {},
-        totalEvolutions: state.totalEvolutions ?? 0,
-      };
-    }),
+getLearningInsights: publicProcedure.query(() => {
+  const state = learningEngine.getState();
+  return {
+    insights: state.insights ?? [],
+    pairs: state.pairs ?? {},
+    sessions: state.sessions ?? [],
+    strategies: state.strategies ?? {},
+    confidenceBuckets: state.confidenceBuckets ?? {},
+    params: state.params ?? {},
+    totalEvolutions: state.totalEvolutions ?? 0,
+  };
+}),
 
     // Get funded account readiness
     getFundedReadiness: publicProcedure.query(() => {
