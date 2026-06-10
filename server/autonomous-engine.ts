@@ -39,6 +39,7 @@ import {
 } from "./strategy-engine";
 import { analysePortfolioIntelligence } from "./portfolio-intelligence";
 import { evaluateMetaApproval } from "./meta-approval";
+import { calculateDynamicRisk } from "./dynamic-risk";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1299,33 +1300,118 @@ if (cutoff > 0) {
         return;
       }
 
-      // ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
-      // Use fractional Kelly (25%) when we have enough trade history
-      // Kelly fraction = W - (1-W)/R  where W=win rate, R=avg win/avg loss
-      // Fractional Kelly = Kelly * 0.25 (conservative, avoids over-betting)
-      let effectiveRiskPct = cfg.riskPercent;
-      const recentTrades = this.state.tradeHistory.slice(-30);
-      if (recentTrades.length >= 15) {
-        const wins = recentTrades.filter(t => t.pnl > 0);
-        const losses = recentTrades.filter(t => t.pnl < 0);
-        if (wins.length >= 5 && losses.length >= 3) {
-          const winRate = wins.length / recentTrades.length;
-          const avgWin = wins.reduce((s, t) => s + t.pnl, 0) / wins.length;
-          const avgLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length);
-          const rr = avgLoss > 0 ? avgWin / avgLoss : 1;
-          const kelly = winRate - (1 - winRate) / rr;
-          const fractionalKelly = Math.max(0.005, Math.min(kelly * 0.25, 0.02)); // cap at 2%, floor at 0.5%
-          effectiveRiskPct = fractionalKelly * 100;
-          // Scale down further on losing streaks
-          const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
-          if (recentLosses >= 4) effectiveRiskPct *= 0.5; // 4/5 recent losses — halve size
-          else if (recentLosses >= 3) effectiveRiskPct *= 0.7; // 3/5 — reduce by 30%
-          this.log(`📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate*100).toFixed(0)}% RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`);
-        }
-      }
+// ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
+let effectiveRiskPct = cfg.riskPercent;
+const recentTrades = this.state.tradeHistory.slice(-30);
+
+if (recentTrades.length >= 15) {
+  const wins = recentTrades.filter(t => t.pnl > 0);
+  const losses = recentTrades.filter(t => t.pnl < 0);
+
+  if (wins.length >= 5 && losses.length >= 3) {
+    const winRate = wins.length / recentTrades.length;
+    const avgWin = wins.reduce((s, t) => s + t.pnl, 0) / wins.length;
+    const avgLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length);
+    const rr = avgLoss > 0 ? avgWin / avgLoss : 1;
+    const kelly = winRate - (1 - winRate) / rr;
+    const fractionalKelly = Math.max(0.005, Math.min(kelly * 0.25, 0.02));
+
+    effectiveRiskPct = fractionalKelly * 100;
+
+    const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
+
+    if (recentLosses >= 4) effectiveRiskPct *= 0.5;
+    else if (recentLosses >= 3) effectiveRiskPct *= 0.7;
+
+    this.log(
+      `📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate * 100).toFixed(0)}% ` +
+      `RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`
+    );
+  }
+}
+
+// ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
+const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
+const metaRegime = regime.regime ?? "UNKNOWN";
+
+const metaApproval = evaluateMetaApproval({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  confidence: finalConfidence,
+  baseRiskPct: effectiveRiskPct,
+
+  pairLearning: learningEngine.getPairLearning(pairStat.instrument),
+  strategyLearning: learningEngine.getStrategyLearning?.(metaStrategy),
+  regimeLearning: learningEngine.getRegimeLearning?.(metaRegime),
+  confidenceCalibration: learningEngine.getConfidenceCalibration?.(finalConfidence),
+});
+
+if (!metaApproval.approved) {
+  this.log(
+    `🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    metaApproval.reason
+  );
+  return;
+}
+
+if (metaApproval.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * metaApproval.riskMultiplier
+  );
+
+  this.log(
+    `🧠 META RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    metaApproval.reason
+  );
+} else {
+  this.log(
+    `🧠 META OK: ${pairStat.instrument} ${finalAction} — ` +
+    metaApproval.reason
+  );
+}
+
+// ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
+const equityPeak = Math.max(
+  ...(this.state.equityCurve ?? []).map(e => e.equity),
+  this.state.accountBalance > 0 ? this.state.accountBalance : 0
+);
+
+const currentDrawdownPct =
+  equityPeak > 0
+    ? ((equityPeak - this.state.accountEquity) / equityPeak) * 100
+    : 0;
+
+const dynamicRisk = calculateDynamicRisk({
+  baseRiskPct: effectiveRiskPct,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  strategyScore: metaApproval.components.strategyScore,
+  pairScore: metaApproval.components.pairScore,
+  regimeScore: metaApproval.components.regimeScore,
+  currentDrawdownPct,
+});
+
+effectiveRiskPct = dynamicRisk.finalRiskPct;
+
+this.log(
+  `🎯 DYNAMIC RISK: ${pairStat.instrument} ${finalAction} — ` +
+  `${effectiveRiskPct.toFixed(2)}% | ${dynamicRisk.reason}`
+);
+
+const units = calculateUnits(
+  this.state.accountBalance,
+  effectiveRiskPct,
+  slDist,
+  pairStat.instrument
+);
+
 // ── PORTFOLIO INTELLIGENCE V1 ───────────────────────────────────────────────
-// Final portfolio-level approval before sending the order.
-// This checks projected heat, currency exposure, and crowded same-direction bets.
 const portfolioCheck = analysePortfolioIntelligence(
   openTrades.map(t => ({
     instrument: t.instrument,
@@ -1363,21 +1449,6 @@ this.log(
   `🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ` +
   portfolioCheck.reason
 );
-
-      const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
-      pairStat.lastTrade = Date.now();
-      this.state.totalTrades++;
-      this.state.openTradesCount++;
-      this.tradesSinceWalkForward++;
-      this.openTradeSnapshots.set(tradeId, {
-        id: tradeId, instrument: pairStat.instrument, direction: finalAction,
-        units, entryPrice: entry, stopLoss: sl, takeProfit: tp,
-        openTime: Date.now(), unrealisedPnl: 0,
-      });
-      const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
-      this.log(`✅ ${finalAction} ${pairStat.instrument} [${regime.regime}] | ${units.toLocaleString()} units | SL ${sl.toFixed(dp)} TP ${tp.toFixed(dp)} | RR ${(reward/slDist).toFixed(1)} | ${finalReason}`);
-      
-      const units = calculateUnits(this.state.accountBalance, effectiveRiskPct, slDist, pairStat.instrument);
 
 // Telegram notification — fire and forget
       notifyTradeOpen({
