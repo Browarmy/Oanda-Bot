@@ -113,11 +113,27 @@ export interface ConfidenceBucketLearning {
   lastUpdated: number;
 }
 
+export interface RegimeLearning {
+  regime: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  score: number;
+  enabled: boolean;
+  lastUpdated: number;
+}
+
 export interface LearningState {
   pairs: Record<string, PairLearning>;
   sessions: SessionLearning[];
   strategies: Record<string, StrategyLearning>;
   confidenceBuckets: Record<string, ConfidenceBucketLearning>;
+  regimes: Record<string, RegimeLearning>;
   params: SignalParams;
   patterns: TradePattern[];
   totalEvolutions: number;
@@ -259,6 +275,39 @@ function computeStrategyScore(strategy: StrategyLearning): number {
   );
 }
 
+function defaultRegimeLearning(regime: string): RegimeLearning {
+  return {
+    regime,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0.5,
+    avgPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: 1.0,
+    score: 0.5,
+    enabled: true,
+    lastUpdated: Date.now(),
+  };
+}
+
+function computeRegimeScore(regime: RegimeLearning): number {
+  if (regime.trades < 5) return 0.5;
+
+  const wrScore = regime.winRate;
+  const pfScore = Math.min(regime.profitFactor / 2.5, 1);
+  const pnlScore = regime.avgPnl > 0 ? 0.75 : 0.25;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      wrScore * 0.45 + pfScore * 0.35 + pnlScore * 0.20
+    )
+  );
+}
+
 // ─── Learning Engine ──────────────────────────────────────────────────────────
 
 export class LearningEngine {
@@ -277,6 +326,7 @@ this.state = {
   sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
   strategies: {},
   confidenceBuckets: {},
+  regimes: {},
   params: { ...DEFAULT_PARAMS },
   patterns: [],
   totalEvolutions: 0,
@@ -299,6 +349,7 @@ this.state = {
 if (row.key === "sessions") this.state.sessions = parsed;
 if (row.key === "strategies") this.state.strategies = parsed;
 if (row.key === "confidenceBuckets") this.state.confidenceBuckets = parsed;
+if (row.key === "regimes") this.state.regimes = parsed;
 if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
           if (row.key === "patterns") this.state.patterns = parsed;
  if (row.key === "meta") {
@@ -334,6 +385,7 @@ if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
 await upsert("sessions", this.state.sessions);
 await upsert("strategies", this.state.strategies);
 await upsert("confidenceBuckets", this.state.confidenceBuckets);
+await upsert("regimes", this.state.regimes);
 await upsert("params", this.state.params);
       await upsert("patterns", this.state.patterns.slice(-this.MAX_PATTERNS));
 await upsert("meta", {
@@ -479,6 +531,7 @@ if (strat.trades >= 10 && strat.score >= 0.45 && !strat.enabled) {
 }
 
 // 2c. Update confidence calibration
+
 const confidence = Math.max(0, Math.min(0.99, trade.confidence ?? 0));
 const confidenceBucketName = getConfidenceBucketName(confidence);
 
@@ -514,6 +567,63 @@ bucket.lastUpdated = Date.now();
 if (bucket.trades === 10) {
   this.addInsight(
     `🎯 Confidence ${bucket.bucket}% calibrated: WR ${(bucket.winRate * 100).toFixed(0)}%, PF ${bucket.profitFactor.toFixed(2)}`
+  );
+}
+
+// 2d. Update regime learning
+const regimeName = trade.regime ?? "UNKNOWN";
+
+if (!this.state.regimes[regimeName]) {
+  this.state.regimes[regimeName] = defaultRegimeLearning(regimeName);
+}
+
+const regimeLearning = this.state.regimes[regimeName];
+
+regimeLearning.trades++;
+
+if (trade.won) {
+  regimeLearning.wins++;
+  regimeLearning.grossProfit += Math.max(0, trade.pnl);
+} else {
+  regimeLearning.losses++;
+  regimeLearning.grossLoss += Math.abs(Math.min(0, trade.pnl));
+}
+
+regimeLearning.winRate =
+  regimeLearning.wins / Math.max(1, regimeLearning.trades);
+
+regimeLearning.avgPnl =
+  ema1([regimeLearning.avgPnl, trade.pnl], 0.2);
+
+regimeLearning.profitFactor =
+  regimeLearning.grossLoss > 0
+    ? regimeLearning.grossProfit / regimeLearning.grossLoss
+    : regimeLearning.grossProfit > 0
+      ? 99
+      : 1;
+
+regimeLearning.score = computeRegimeScore(regimeLearning);
+regimeLearning.lastUpdated = Date.now();
+
+if (
+  regimeLearning.trades >= 10 &&
+  regimeLearning.score < 0.35 &&
+  regimeLearning.enabled
+) {
+  regimeLearning.enabled = false;
+  this.addInsight(
+    `🚫 Regime ${regimeName} disabled — score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}%`
+  );
+}
+
+if (
+  regimeLearning.trades >= 10 &&
+  regimeLearning.score >= 0.45 &&
+  !regimeLearning.enabled
+) {
+  regimeLearning.enabled = true;
+  this.addInsight(
+    `✅ Regime ${regimeName} re-enabled — score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}%`
   );
 }
 
@@ -740,6 +850,30 @@ getBestConfidenceBuckets(n = 3): ConfidenceBucketLearning[] {
 getConfidenceCalibration(confidence: number): ConfidenceBucketLearning {
   const bucketName = getConfidenceBucketName(confidence);
   return this.state.confidenceBuckets[bucketName] ?? defaultConfidenceBucket(bucketName);
+}
+
+getRegimeLearning(regime: string): RegimeLearning {
+  return this.state.regimes[regime] ?? defaultRegimeLearning(regime);
+}
+
+isRegimeEnabled(regime: string): boolean {
+  const r = this.state.regimes[regime];
+  if (!r) return true;
+  return r.enabled;
+}
+
+getTopRegimes(n = 5): RegimeLearning[] {
+  return Object.values(this.state.regimes)
+    .filter(r => r.trades >= 3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n);
+}
+
+getWorstRegimes(n = 5): RegimeLearning[] {
+  return Object.values(this.state.regimes)
+    .filter(r => r.trades >= 3)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, n);
 }
 
   private addInsight(msg: string) {
