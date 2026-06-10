@@ -78,6 +78,8 @@ export interface TradePattern {
   strategy?: string;
   regime?: string;
   instrument?: string;
+  confidence?: number;
+  confidenceBucket?: string;
 }
 
 export interface StrategyLearning {
@@ -95,10 +97,27 @@ export interface StrategyLearning {
   lastUpdated: number;
 }
 
+export interface ConfidenceBucketLearning {
+  bucket: string;
+  minConfidence: number;
+  maxConfidence: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  calibratedScore: number;
+  lastUpdated: number;
+}
+
 export interface LearningState {
   pairs: Record<string, PairLearning>;
   sessions: SessionLearning[];
   strategies: Record<string, StrategyLearning>;
+  confidenceBuckets: Record<string, ConfidenceBucketLearning>;
   params: SignalParams;
   patterns: TradePattern[];
   totalEvolutions: number;
@@ -199,6 +218,7 @@ this.state = {
   pairs: {},
   sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
   strategies: {},
+  confidenceBuckets: {},
   params: { ...DEFAULT_PARAMS },
   patterns: [],
   totalEvolutions: 0,
@@ -218,9 +238,10 @@ this.state = {
         try {
           const parsed = JSON.parse(row.value);
           if (row.key === "pairs") this.state.pairs = parsed;
-          if (row.key === "sessions") this.state.sessions = parsed;
-          if (row.key === "strategies") this.state.strategies = parsed;
-          if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
+if (row.key === "sessions") this.state.sessions = parsed;
+if (row.key === "strategies") this.state.strategies = parsed;
+if (row.key === "confidenceBuckets") this.state.confidenceBuckets = parsed;
+if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
           if (row.key === "patterns") this.state.patterns = parsed;
  if (row.key === "meta") {
   this.state.totalEvolutions = parsed.totalEvolutions ?? 0;
@@ -252,9 +273,10 @@ this.state = {
         `);
       };
       await upsert("pairs", this.state.pairs);
-      await upsert("sessions", this.state.sessions);
-      await upsert("strategies", this.state.strategies);
-      await upsert("params", this.state.params);
+await upsert("sessions", this.state.sessions);
+await upsert("strategies", this.state.strategies);
+await upsert("confidenceBuckets", this.state.confidenceBuckets);
+await upsert("params", this.state.params);
       await upsert("patterns", this.state.patterns.slice(-this.MAX_PATTERNS));
 await upsert("meta", {
   totalEvolutions: this.state.totalEvolutions,
@@ -284,9 +306,10 @@ await upsert("meta", {
     ema9: number;
     ema21: number;
     openTime: number;
-    closedAt: number;
-    strategy?: string;
-    regime?: string;
+closedAt: number;
+strategy?: string;
+regime?: string;
+confidence?: number;
   }) {
     const hour = new Date(trade.openTime).getUTCHours();
 
@@ -397,10 +420,49 @@ if (strat.trades >= 10 && strat.score >= 0.45 && !strat.enabled) {
   );
 }
 
+// 2c. Update confidence calibration
+const confidence = Math.max(0, Math.min(0.99, trade.confidence ?? 0));
+const confidenceBucketName = getConfidenceBucketName(confidence);
+
+if (!this.state.confidenceBuckets[confidenceBucketName]) {
+  this.state.confidenceBuckets[confidenceBucketName] =
+    defaultConfidenceBucket(confidenceBucketName);
+}
+
+const bucket = this.state.confidenceBuckets[confidenceBucketName];
+
+bucket.trades++;
+
+if (trade.won) {
+  bucket.wins++;
+  bucket.grossProfit += Math.max(0, trade.pnl);
+} else {
+  bucket.losses++;
+  bucket.grossLoss += Math.abs(Math.min(0, trade.pnl));
+}
+
+bucket.winRate = bucket.wins / Math.max(1, bucket.trades);
+bucket.avgPnl = ema1([bucket.avgPnl, trade.pnl], 0.2);
+bucket.profitFactor =
+  bucket.grossLoss > 0
+    ? bucket.grossProfit / bucket.grossLoss
+    : bucket.grossProfit > 0
+      ? 99
+      : 1;
+
+bucket.calibratedScore = computeConfidenceCalibrationScore(bucket);
+bucket.lastUpdated = Date.now();
+
+if (bucket.trades === 10) {
+  this.addInsight(
+    `🎯 Confidence ${bucket.bucket}% calibrated: WR ${(bucket.winRate * 100).toFixed(0)}%, PF ${bucket.profitFactor.toFixed(2)}`
+  );
+}
+
     // 3. Store pattern
     const atrNorm = trade.entryPrice > 0 ? trade.atr / trade.entryPrice : 0;
     const emaSpread = trade.ema21 > 0 ? (trade.ema9 - trade.ema21) / trade.ema21 : 0;
-    this.state.patterns.push({
+this.state.patterns.push({
   rsi: trade.rsi,
   macd: trade.macd,
   bbPosition: trade.bbPosition,
@@ -412,6 +474,8 @@ if (strat.trades >= 10 && strat.score >= 0.45 && !strat.enabled) {
   strategy: trade.strategy ?? "UNKNOWN",
   regime: trade.regime ?? "UNKNOWN",
   instrument: trade.instrument,
+  confidence,
+  confidenceBucket: confidenceBucketName,
 });
     if (this.state.patterns.length > this.MAX_PATTERNS) {
       this.state.patterns.shift();
@@ -601,6 +665,23 @@ getEvolutionStatus() {
     totalEvolutions: this.state.totalEvolutions,
     lastEvolution: this.state.lastEvolution,
   };
+}
+
+getConfidenceBuckets(): ConfidenceBucketLearning[] {
+  return Object.values(this.state.confidenceBuckets)
+    .sort((a, b) => a.minConfidence - b.minConfidence);
+}
+
+getBestConfidenceBuckets(n = 3): ConfidenceBucketLearning[] {
+  return Object.values(this.state.confidenceBuckets)
+    .filter(b => b.trades >= 5)
+    .sort((a, b) => b.calibratedScore - a.calibratedScore)
+    .slice(0, n);
+}
+
+getConfidenceCalibration(confidence: number): ConfidenceBucketLearning {
+  const bucketName = getConfidenceBucketName(confidence);
+  return this.state.confidenceBuckets[bucketName] ?? defaultConfidenceBucket(bucketName);
 }
 
   private addInsight(msg: string) {
