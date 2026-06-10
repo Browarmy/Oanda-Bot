@@ -23,6 +23,7 @@ import { MultiBotManager } from "./multi-bot-manager";
 import { autonomousEngine } from "./autonomous-engine";
 import { learningEngine } from "./learning-engine";
 import { runBacktest } from "./backtest-engine";
+import { decisionJournal } from "./decision-journal";
 import { configureTelegram, getTelegramConfig } from "./telegram-notifier";
 
 const multiBotManager = new MultiBotManager();
