@@ -38,6 +38,7 @@ import {
   type WalkForwardResult,
 } from "./strategy-engine";
 import { analysePortfolioIntelligence } from "./portfolio-intelligence";
+import { evaluateMetaApproval } from "./meta-approval";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1322,7 +1323,6 @@ if (cutoff > 0) {
           this.log(`📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate*100).toFixed(0)}% RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`);
         }
       }
-      const units = calculateUnits(this.state.accountBalance, effectiveRiskPct, slDist, pairStat.instrument);
 // ── PORTFOLIO INTELLIGENCE V1 ───────────────────────────────────────────────
 // Final portfolio-level approval before sending the order.
 // This checks projected heat, currency exposure, and crowded same-direction bets.
@@ -1376,7 +1376,10 @@ this.log(
       });
       const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
       this.log(`✅ ${finalAction} ${pairStat.instrument} [${regime.regime}] | ${units.toLocaleString()} units | SL ${sl.toFixed(dp)} TP ${tp.toFixed(dp)} | RR ${(reward/slDist).toFixed(1)} | ${finalReason}`);
-      // Telegram notification — fire and forget
+      
+      const units = calculateUnits(this.state.accountBalance, effectiveRiskPct, slDist, pairStat.instrument);
+
+// Telegram notification — fire and forget
       notifyTradeOpen({
         instrument: pairStat.instrument, direction: finalAction, units,
         entryPrice: entry, stopLoss: sl, takeProfit: tp,
@@ -1395,6 +1398,7 @@ _signal: {
   regime: regime.regime,
   strategy: stratSignal.strategy,
   confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
 },
       });
 
