@@ -42,6 +42,7 @@ import { evaluateMetaApproval } from "./meta-approval";
 import { calculateDynamicRisk } from "./dynamic-risk";
 import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
 import { decisionJournal } from "./decision-journal";
+import { evaluateRegimeRisk } from "./regime-risk-governor";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1476,6 +1477,86 @@ if (metaApproval.riskMultiplier < 1) {
     metaApproval.reason
   );
 } else {
+
+// ── REGIME RISK GOVERNOR V1 ────────────────────────────────────────────────
+const regimeRisk = evaluateRegimeRisk({
+  instrument: pairStat.instrument,
+  regime: regime.regime,
+  riskMood: regime.riskMood,
+  regimeConfidence: regime.regimeConfidence,
+  volatilityScore: regime.volatilityScore,
+  trendScore: regime.trendScore,
+  rangeScore: regime.rangeScore,
+  breakoutScore: regime.breakoutScore,
+  baseRiskPct: effectiveRiskPct,
+});
+
+if (!regimeRisk.approved) {
+  this.log(
+    `🧭 REGIME BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    regimeRisk.reason
+  );
+await decisionJournal.record({
+  type: "BLOCKED",
+  stage: "SIGNAL",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: `Regime block: ${regimeRisk.reason}`,
+  extra: {
+    riskMood: regime.riskMood,
+    regimeConfidence: regime.regimeConfidence,
+    volatilityScore: regime.volatilityScore,
+    trendScore: regime.trendScore,
+    rangeScore: regime.rangeScore,
+    breakoutScore: regime.breakoutScore,
+  },
+});
+  return;
+}
+
+if (regimeRisk.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * regimeRisk.riskMultiplier
+  );
+
+  this.log(
+    `🧭 REGIME RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    regimeRisk.reason
+  );
+
+await decisionJournal.record({
+  type: "RISK_REDUCED",
+  stage: "SIGNAL",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: `Regime risk reduction: ${regimeRisk.reason}`,
+  extra: {
+    riskMultiplier: regimeRisk.riskMultiplier,
+    riskMood: regime.riskMood,
+    regimeConfidence: regime.regimeConfidence,
+    volatilityScore: regime.volatilityScore,
+  },
+});
+
+} else {
+  this.log(
+    `🧭 REGIME RISK OK: ${pairStat.instrument} ${finalAction} — ` +
+    regimeRisk.reason
+  );
+}
 
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
 const equityPeak = Math.max(
