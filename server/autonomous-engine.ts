@@ -43,6 +43,7 @@ import { calculateDynamicRisk } from "./dynamic-risk";
 import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
 import { decisionJournal } from "./decision-journal";
 import { evaluateRegimeRisk } from "./regime-risk-governor";
+import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1319,12 +1320,69 @@ if (crossMarket.confidenceAdjustment !== 0) {
       finalConfidence = Math.min(Math.max(sessionAdj.adjustedConfidence, 0), 0.99);
       this.log(`${sessionAdj.sessionNote} [${pairStat.instrument}]`);
 
-      // ── Learned confidence threshold ──────────────────────────────────────────
-      const learnedThreshold = learningEngine.getPairConfidenceThreshold(pairStat.instrument);
-      if (finalConfidence < learnedThreshold) {
-        this.log(`🔍 ${pairStat.instrument} — ${(finalConfidence*100).toFixed(0)}% < learned threshold ${(learnedThreshold*100).toFixed(0)}% — SKIP`);
-        return;
-      }
+      // ── ADAPTIVE CONFIDENCE THRESHOLD V1 ───────────────────────────────────────
+const thresholdStrategy = stratSignal.strategy ?? "UNKNOWN";
+const thresholdRegime = regime.regime ?? "UNKNOWN";
+
+const thresholdPairLearning = learningEngine.getPairLearning(pairStat.instrument);
+const thresholdStrategyLearning = learningEngine.getStrategyLearning?.(thresholdStrategy);
+const thresholdRegimeLearning = learningEngine.getRegimeLearning?.(thresholdRegime);
+const thresholdConfidenceCalibration =
+  learningEngine.getConfidenceCalibration?.(finalConfidence);
+
+const learnedThreshold = learningEngine.getPairConfidenceThreshold(pairStat.instrument);
+
+const adaptiveThreshold = calculateAdaptiveConfidenceThreshold({
+  baseThreshold: learnedThreshold,
+  pairScore: thresholdPairLearning?.score,
+  strategyScore: thresholdStrategyLearning?.score,
+  regimeScore: thresholdRegimeLearning?.score,
+  confidenceCalibrationScore: thresholdConfidenceCalibration?.calibratedScore,
+  regimeConfidence: regime.regimeConfidence,
+  riskMood: regime.riskMood,
+});
+
+if (finalConfidence < adaptiveThreshold.threshold) {
+  this.log(
+    `🎚️ CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${(finalConfidence * 100).toFixed(0)}% < ` +
+    `${(adaptiveThreshold.threshold * 100).toFixed(0)}% | ` +
+    adaptiveThreshold.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "SIGNAL",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: thresholdStrategy,
+    regime: thresholdRegime,
+    reason:
+      `Confidence ${(finalConfidence * 100).toFixed(0)}% below adaptive threshold ` +
+      `${(adaptiveThreshold.threshold * 100).toFixed(0)}%: ${adaptiveThreshold.reason}`,
+    extra: {
+      learnedThreshold,
+      adaptiveThreshold: adaptiveThreshold.threshold,
+      adjustment: adaptiveThreshold.adjustment,
+      pairScore: thresholdPairLearning?.score,
+      strategyScore: thresholdStrategyLearning?.score,
+      regimeScore: thresholdRegimeLearning?.score,
+      confidenceCalibrationScore: thresholdConfidenceCalibration?.calibratedScore,
+      riskMood: regime.riskMood,
+      regimeConfidence: regime.regimeConfidence,
+    },
+  });
+
+  return;
+}
+
+this.log(
+  `🎚️ CONFIDENCE OK: ${pairStat.instrument} ${finalAction} — ` +
+  `${(finalConfidence * 100).toFixed(0)}% >= ` +
+  `${(adaptiveThreshold.threshold * 100).toFixed(0)}% | ` +
+  adaptiveThreshold.reason
+);
 
       if (finalAtr === 0) { this.log(`${pairStat.instrument} — zero ATR, skip`); return; }
 
@@ -1401,45 +1459,25 @@ const metaApproval = evaluateMetaApproval({
 });
 
 if (!metaApproval.approved) {
-  decisionJournal.record({
-    instrument: pairStat.instrument,
-    direction: finalAction,
-    action: "BLOCKED",
-    layer: "META",
-    reason: metaApproval.reason,
-    confidence: finalConfidence,
-    metaScore: metaApproval.metaScore,
-    strategy: metaStrategy,
-    regime: metaRegime,
-    extra: {
-      components: metaApproval.components,
-    },
-  });
-
   this.log(
     `🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     metaApproval.reason
   );
 
-  return;
-}
-
-await decisionJournal.record({
-  type: "RISK_REDUCED",
-  stage: "META",
-  instrument: pairStat.instrument,
-  direction: finalAction,
-  confidence: finalConfidence,
-  metaScore: metaApproval.metaScore,
-  riskPct: effectiveRiskPct,
-  strategy: metaStrategy,
-  regime: metaRegime,
-  reason: metaApproval.reason,
-  extra: {
-    riskMultiplier: metaApproval.riskMultiplier,
-    components: metaApproval.components,
-  },
-});
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: metaApproval.reason,
+    extra: {
+      components: metaApproval.components,
+    },
+  });
 
   return;
 }
@@ -1452,31 +1490,36 @@ if (metaApproval.riskMultiplier < 1) {
     effectiveRiskPct * metaApproval.riskMultiplier
   );
 
-  decisionJournal.record({
-    instrument: pairStat.instrument,
-    direction: finalAction,
-    action: "RISK_REDUCED",
-    layer: "META",
-    reason: metaApproval.reason,
-    confidence: finalConfidence,
-    metaScore: metaApproval.metaScore,
-    riskPct: effectiveRiskPct,
-    riskMultiplier: metaApproval.riskMultiplier,
-    strategy: metaStrategy,
-    regime: metaRegime,
-    extra: {
-      beforeRiskPct: beforeRisk,
-      afterRiskPct: effectiveRiskPct,
-      components: metaApproval.components,
-    },
-  });
-
   this.log(
     `🧠 META RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
     `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
     metaApproval.reason
   );
+
+  await decisionJournal.record({
+    type: "RISK_REDUCED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: metaApproval.reason,
+    extra: {
+      beforeRiskPct: beforeRisk,
+      afterRiskPct: effectiveRiskPct,
+      riskMultiplier: metaApproval.riskMultiplier,
+      components: metaApproval.components,
+    },
+  });
 } else {
+  this.log(
+    `🧠 META OK: ${pairStat.instrument} ${finalAction} — ` +
+    metaApproval.reason
+  );
+}
 
 // ── REGIME RISK GOVERNOR V1 ────────────────────────────────────────────────
 const regimeRisk = evaluateRegimeRisk({
