@@ -41,6 +41,16 @@ export interface RegimeAnalysis {
   trendStrength: number;   // 0-1
   volatility: number;      // 0-1
   rangebound: number;      // 0-1
+
+  // Regime Intelligence V2
+  regimeConfidence: number; // 0-1
+  trendScore: number;       // 0-1
+  rangeScore: number;       // 0-1
+  breakoutScore: number;    // 0-1
+  volatilityScore: number;  // 0-1
+  momentumScore: number;    // 0-1
+  liquidityScore: number;   // 0-1
+  riskMood: "CALM" | "NORMAL" | "HOT" | "DANGEROUS";
 }
 
 export interface StrategySignal {
@@ -169,6 +179,10 @@ function macdHist(values: number[]): number {
 
 function nPeriodHigh(candles: Candle[], n: number): number {
   return Math.max(...candles.slice(-n).map(c => c.high));
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
 }
 
 function nPeriodLow(candles: Candle[], n: number): number {
@@ -302,8 +316,13 @@ export function detectRegime(m15: Candle[], h1: Candle[]): RegimeAnalysis {
 
   // ATR percentile over last 50 candles
   const recentAtrs = m15.slice(-50).slice(1).map((c, i) =>
-    Math.max(c.high - c.low, Math.abs(c.high - m15[i].close), Math.abs(c.low - m15[i].close))
+    Math.max(
+      c.high - c.low,
+      Math.abs(c.high - m15[i].close),
+      Math.abs(c.low - m15[i].close)
+    )
   );
+
   const atr50th = percentile(recentAtrs, 50);
   const atr80th = percentile(recentAtrs, 80);
   const atrPercentile = atr50th > 0 ? Math.min(atr / atr50th, 2) : 1;
@@ -313,6 +332,7 @@ export function detectRegime(m15: Candle[], h1: Candle[]): RegimeAnalysis {
   for (let i = 20; i < closes.length; i++) {
     recentBbWidths.push(bbWidth(closes.slice(0, i + 1), 20));
   }
+
   const bbW40th = percentile(recentBbWidths, 40);
   const bbW70th = percentile(recentBbWidths, 70);
 
@@ -321,25 +341,81 @@ export function detectRegime(m15: Candle[], h1: Candle[]): RegimeAnalysis {
   const high20 = nPeriodHigh(m15, 20);
   const low20 = nPeriodLow(m15, 20);
   const range20 = high20 - low20;
-  const nearBreakout = range20 > 0 && (
-    (lastClose > high20 - range20 * 0.05) ||
-    (lastClose < low20 + range20 * 0.05)
-  );
+
+  const nearBreakout =
+    range20 > 0 &&
+    (
+      lastClose > high20 - range20 * 0.05 ||
+      lastClose < low20 + range20 * 0.05
+    );
 
   // Volume surge
   const vols = m15.slice(-21).map(c => c.volume);
-  const avgVol = vols.slice(0, 20).reduce((a, b) => a + b, 0) / 20;
-  const volSurge = vols[20] > avgVol * 1.4;
+  const avgVol =
+    vols.length >= 21
+      ? vols.slice(0, 20).reduce((a, b) => a + b, 0) / 20
+      : 0;
+
+  const volSurge =
+    avgVol > 0 && vols[20] > avgVol * 1.4;
+
+  // H1 momentum context
+  const h1Closes = h1.map(c => c.close);
+  const h1Ema9 = emaArr(h1Closes, 9);
+  const h1Ema21 = emaArr(h1Closes, 21);
+
+  const h1Fast = h1Ema9[h1Ema9.length - 1] ?? lastClose;
+  const h1Slow = h1Ema21[h1Ema21.length - 1] ?? lastClose;
+
+  const h1TrendDistance =
+    lastClose > 0
+      ? Math.abs(h1Fast - h1Slow) / lastClose
+      : 0;
+
+  const recentReturn =
+    closes.length >= 6
+      ? Math.abs(lastClose - closes[closes.length - 6]) / lastClose
+      : 0;
+
+  // Scores
+  const trendScore = clamp01((adxVal - 15) / 25);
+  const rangeScore = clamp01((25 - adxVal) / 25) * clamp01(bbW40th > 0 ? 1 - bbW / bbW40th : 0.5);
+  const breakoutScore =
+    clamp01((nearBreakout ? 0.55 : 0) + (volSurge ? 0.25 : 0) + (bbW70th > 0 && bbW > bbW70th ? 0.20 : 0));
+
+  const volatilityScore = clamp01(atrPercentile / 2);
+  const momentumScore = clamp01((recentReturn * 250) + (h1TrendDistance * 100));
+  const liquidityScore = clamp01(avgVol > 0 ? vols[vols.length - 1] / (avgVol * 1.5) : 0.5);
 
   let regime: MarketRegime = "NEUTRAL";
-  if (adxVal > 25 && atrPercentile > 0.8) {
-    regime = "TRENDING";
-  } else if (adxVal < 20 && bbW < bbW40th) {
-    regime = "RANGING";
-  } else if (nearBreakout && volSurge && bbW > bbW70th) {
+  let regimeConfidence = 0.45;
+
+  if (breakoutScore >= 0.75) {
     regime = "BREAKOUT";
-  } else if (atr > atr80th) {
+    regimeConfidence = breakoutScore;
+  } else if (trendScore >= 0.45 && atrPercentile > 0.8) {
+    regime = "TRENDING";
+    regimeConfidence = clamp01(trendScore * 0.7 + momentumScore * 0.3);
+  } else if (rangeScore >= 0.45) {
+    regime = "RANGING";
+    regimeConfidence = rangeScore;
+  } else if (atr > atr80th || volatilityScore >= 0.75) {
     regime = "VOLATILE";
+    regimeConfidence = volatilityScore;
+  }
+
+  let riskMood: RegimeAnalysis["riskMood"] = "NORMAL";
+
+  if (volatilityScore < 0.35 && liquidityScore >= 0.4) {
+    riskMood = "CALM";
+  }
+
+  if (volatilityScore >= 0.65 || liquidityScore < 0.25) {
+    riskMood = "HOT";
+  }
+
+  if (volatilityScore >= 0.85 || liquidityScore < 0.15) {
+    riskMood = "DANGEROUS";
   }
 
   return {
@@ -347,10 +423,20 @@ export function detectRegime(m15: Candle[], h1: Candle[]): RegimeAnalysis {
     adx: adxVal,
     bbWidth: bbW,
     atrPercentile,
-    trendStrength: Math.min(adxVal / 50, 1),
-    volatility: Math.min(atrPercentile / 2, 1),
-    rangebound: adxVal < 20 ? (1 - adxVal / 20) : 0,
+    trendStrength: trendScore,
+    volatility: volatilityScore,
+    rangebound: rangeScore,
+
+    regimeConfidence,
+    trendScore,
+    rangeScore,
+    breakoutScore,
+    volatilityScore,
+    momentumScore,
+    liquidityScore,
+    riskMood,
   };
+}
 }
 
 // ─── Strategy 1: Trend Following ──────────────────────────────────────────────
