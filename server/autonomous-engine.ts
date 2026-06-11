@@ -46,6 +46,7 @@ import { evaluateRegimeRisk } from "./regime-risk-governor";
 import { strategyGenome }
 from "./strategy-genome";
 import { marketMemory } from "./market-memory";
+import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
@@ -1479,6 +1480,35 @@ this.log(
   memoryCheck.reason
 );
 
+// ── STRATEGY-REGIME MATRIX V1 ─────────────────────────────────────────────
+const matrixCheck = strategyRegimeMatrix.shouldBlock(metaStrategy, metaRegime);
+
+if (matrixCheck.blocked) {
+  this.log(
+    `🧬 MATRIX BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    matrixCheck.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Strategy-regime matrix block: ${matrixCheck.reason}`,
+    extra: matrixCheck.cell,
+  });
+
+  return;
+}
+
+this.log(
+  `🧬 MATRIX OK: ${pairStat.instrument} ${finalAction} — ` +
+  matrixCheck.reason
+);
+
 // ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
 const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
 if (
@@ -2026,6 +2056,13 @@ marketMemory.record({
   pnl,
   pips: closed.pips,
 });
+
+strategyRegimeMatrix.record(
+  snapSignal.strategy ?? "UNKNOWN",
+  snapSignal.regime ?? "UNKNOWN",
+  won,
+  pnl
+);
 
 strategyGenome.recordTrade(
   snapSignal.strategy ?? "UNKNOWN",
