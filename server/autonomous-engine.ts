@@ -47,6 +47,7 @@ import { strategyGenome }
 from "./strategy-genome";
 import { marketMemory } from "./market-memory";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
+import { evaluateAdaptiveExit } from "./adaptive-exit";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
@@ -2129,8 +2130,18 @@ if (evoStatus) {
 
         const minMove = isJpy ? 0.005 : 0.00003;
 
+const snapSignal = (snap as any)?._signal ?? {};
+
+const adaptiveExit = evaluateAdaptiveExit({
+  rMultiple: R,
+  riskMood: snapSignal.riskMood,
+  regime: snapSignal.regime,
+  confidence: snapSignal.confidence,
+  metaScore: snapSignal.metaScore,
+});
+
         // Stage 1: Breakeven at 1R
-        if (R >= 1.0 && !this.breakevenSet.has(trade.id)) {
+if (R >= adaptiveExit.moveToBreakevenAtR && !this.breakevenSet.has(trade.id)) {
           const buffer = slDist * 0.05;
           const beSl = trade.direction === "BUY"
             ? snap.entryPrice + buffer
@@ -2150,7 +2161,7 @@ if (evoStatus) {
         }
 
         // Stage 2: Partial TP at 1.5R (lock in profit)
-        if (!this.partialTpTaken.has(trade.id) && R >= 1.5 && trade.units >= 200) {
+if (!this.partialTpTaken.has(trade.id) && R >= adaptiveExit.partialTakeProfitAtR && trade.units >= 200) {
           const halfUnits = Math.floor(trade.units / 2);
           const closeUnits = trade.direction === "BUY" ? -halfUnits : halfUnits;
           try {
@@ -2173,9 +2184,11 @@ if (evoStatus) {
         }
 
         // Stage 3: Dynamic trailing at 2R+
-        if (!this.state.config.trailingStopEnabled || R < 2.0) continue;
+ if (!this.state.config.trailingStopEnabled || R < adaptiveExit.trailStartAtR) continue;
 
-        const trailMult = R >= 3.0 ? 1.0 : 1.5;
+const trailMult = R >= 3.0
+  ? Math.min(1.0, adaptiveExit.trailAtrMultiplier)
+  : adaptiveExit.trailAtrMultiplier;
         const newSl = trade.direction === "BUY"
           ? currentPrice - (currentAtr * trailMult)
           : currentPrice + (currentAtr * trailMult);
