@@ -48,6 +48,9 @@ from "./strategy-genome";
 import { marketMemory } from "./market-memory";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { evaluateAdaptiveExit } from "./adaptive-exit";
+import { marketMemory } from "./market-memory";
+import { strategyGenome } from "./strategy-genome";
+import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
@@ -679,7 +682,10 @@ export class AutonomousEngine extends EventEmitter {
     this.log("🚀 Bot v4 STARTED — quality signals, 1% risk, max 3 trades");
     // Load persisted learning state from DB
     await learningEngine.load();
-    await decisionJournal.load();
+await decisionJournal.load();
+await marketMemory.load();
+await strategyGenome.load();
+await strategyRegimeMatrix.load();
     const lp = learningEngine.getParams();
     this.state.config.rsiLower = lp.rsiLower;
     this.state.config.rsiUpper = lp.rsiUpper;
