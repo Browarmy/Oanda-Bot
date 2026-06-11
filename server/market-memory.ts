@@ -1,3 +1,5 @@
+import { loadJsonFile, saveJsonFile } from "./persistent-memory";
+
 export interface MarketMemoryEntry {
   time: number;
   instrument: string;
@@ -18,9 +20,27 @@ class MarketMemory {
   private memories: MarketMemoryEntry[] = [];
   private readonly maxMemories = 2000;
 
+  async load() {
+    this.memories = await loadJsonFile<MarketMemoryEntry[]>(
+      "market-memory.json",
+      []
+    );
+
+    this.memories = this.memories.slice(-this.maxMemories);
+  }
+
+  async save() {
+    await saveJsonFile(
+      "market-memory.json",
+      this.memories.slice(-this.maxMemories)
+    );
+  }
+
   record(entry: MarketMemoryEntry) {
     this.memories.push(entry);
     this.memories = this.memories.slice(-this.maxMemories);
+
+    this.save().catch(() => {});
   }
 
   findSimilar(input: {
@@ -62,7 +82,14 @@ class MarketMemory {
       score:
         similar.length < 8
           ? 0.5
-          : Math.max(0, Math.min(1, (wins.length / similar.length) * 0.7 + (pnl > 0 ? 0.3 : 0))),
+          : Math.max(
+              0,
+              Math.min(
+                1,
+                (wins.length / similar.length) * 0.7 +
+                  (pnl > 0 ? 0.3 : 0)
+              )
+            ),
     };
   }
 
@@ -86,20 +113,28 @@ class MarketMemory {
     if (similar.winRate < 0.35 && similar.pnl < 0) {
       return {
         blocked: true,
-        reason: `bad memory match: ${similar.wins}W/${similar.losses}L, WR ${(similar.winRate * 100).toFixed(0)}%`,
+        reason:
+          `bad memory match: ${similar.wins}W/${similar.losses}L, ` +
+          `WR ${(similar.winRate * 100).toFixed(0)}%`,
         similar,
       };
     }
 
     return {
       blocked: false,
-      reason: `memory acceptable: ${similar.wins}W/${similar.losses}L, WR ${(similar.winRate * 100).toFixed(0)}%`,
+      reason:
+        `memory acceptable: ${similar.wins}W/${similar.losses}L, ` +
+        `WR ${(similar.winRate * 100).toFixed(0)}%`,
       similar,
     };
   }
 
   getRecent(limit = 100) {
     return this.memories.slice(-limit).reverse();
+  }
+
+  getAll() {
+    return [...this.memories];
   }
 }
 
