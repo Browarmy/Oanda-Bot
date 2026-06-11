@@ -45,6 +45,7 @@ import { decisionJournal } from "./decision-journal";
 import { evaluateRegimeRisk } from "./regime-risk-governor";
 import { strategyGenome }
 from "./strategy-genome";
+import { marketMemory } from "./market-memory";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
@@ -1443,6 +1444,41 @@ if (recentTrades.length >= 15) {
   }
 }
 
+// ── MARKET MEMORY V1 ───────────────────────────────────────────────────────
+const memoryCheck = marketMemory.shouldBlock({
+  instrument: pairStat.instrument,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  confidence: finalConfidence,
+  rsi: finalRsi,
+});
+
+if (memoryCheck.blocked) {
+  this.log(
+    `🧠 MEMORY BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    memoryCheck.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Market memory block: ${memoryCheck.reason}`,
+    extra: memoryCheck.similar,
+  });
+
+  return;
+}
+
+this.log(
+  `🧠 MEMORY OK: ${pairStat.instrument} ${finalAction} — ` +
+  memoryCheck.reason
+);
+
 // ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
 const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
 if (
@@ -1973,6 +2009,22 @@ learningEngine.recordTrade({
   regime: snapSignal.regime ?? "UNKNOWN",
   strategy: snapSignal.strategy ?? "UNKNOWN",
   confidence: snapSignal.confidence ?? 0,
+});
+
+marketMemory.record({
+  time: closed.closedAt,
+  instrument,
+  direction,
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+  regime: snapSignal.regime ?? "UNKNOWN",
+  riskMood: snapSignal.riskMood ?? "UNKNOWN",
+  confidence: snapSignal.confidence ?? 0,
+  metaScore: snapSignal.metaScore,
+  rsi: snapSignal.rsi,
+  atr: snapSignal.atr,
+  won,
+  pnl,
+  pips: closed.pips,
 });
 
 strategyGenome.recordTrade(
