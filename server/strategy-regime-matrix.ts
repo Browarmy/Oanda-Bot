@@ -1,3 +1,5 @@
+import { loadJsonFile, saveJsonFile } from "./persistent-memory";
+
 export interface StrategyRegimeCell {
   key: string;
   strategy: string;
@@ -13,6 +15,24 @@ export interface StrategyRegimeCell {
 
 class StrategyRegimeMatrix {
   private cells = new Map<string, StrategyRegimeCell>();
+
+async load() {
+  const data = await loadJsonFile<StrategyRegimeCell[]>(
+    "strategy-regime-matrix.json",
+    []
+  );
+
+  this.cells = new Map(
+    data.map(c => [c.key, c])
+  );
+}
+
+async save() {
+  await saveJsonFile(
+    "strategy-regime-matrix.json",
+    this.getAll()
+  );
+}
 
   private key(strategy: string, regime: string) {
     return `${strategy}__${regime}`;
@@ -63,6 +83,8 @@ class StrategyRegimeMatrix {
       cell.enabled = true;
     }
   }
+
+this.save().catch(() => {});
 
   shouldBlock(strategy: string, regime: string) {
     const cell = this.get(strategy, regime);
