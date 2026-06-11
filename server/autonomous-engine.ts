@@ -1025,6 +1025,15 @@ if (cutoff > 0) {
       // ── Regime detection ──────────────────────────────────────────────────────
       const regime = detectRegime(m15, h1);
       this.currentRegimes.set(pairStat.instrument, regime.regime);
+this.log(
+  `🧭 REGIME ${pairStat.instrument}: ${regime.regime} ` +
+  `conf ${(regime.regimeConfidence * 100).toFixed(0)}% | ` +
+  `trend ${(regime.trendScore * 100).toFixed(0)}% | ` +
+  `range ${(regime.rangeScore * 100).toFixed(0)}% | ` +
+  `breakout ${(regime.breakoutScore * 100).toFixed(0)}% | ` +
+  `vol ${(regime.volatilityScore * 100).toFixed(0)}% | ` +
+  `${regime.riskMood}`
+);
 
       // ── Walk-forward optimised params for this pair ───────────────────────────
       const wf = this.wfResults.get(pairStat.instrument);
@@ -1708,9 +1717,15 @@ _signal: {
   ema9: finalEma9,
   ema21: finalEma21,
   regime: regime.regime,
-  strategy: stratSignal.strategy,
-  confidence: finalConfidence,
-  metaScore: metaApproval.metaScore,
+regimeConfidence: regime.regimeConfidence,
+riskMood: regime.riskMood,
+trendScore: regime.trendScore,
+rangeScore: regime.rangeScore,
+breakoutScore: regime.breakoutScore,
+volatilityScore: regime.volatilityScore,
+strategy: stratSignal.strategy,
+confidence: finalConfidence,
+metaScore: metaApproval.metaScore,
 },
       });
 
