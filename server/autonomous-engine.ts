@@ -43,6 +43,8 @@ import { calculateDynamicRisk } from "./dynamic-risk";
 import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
 import { decisionJournal } from "./decision-journal";
 import { evaluateRegimeRisk } from "./regime-risk-governor";
+import { strategyGenome }
+from "./strategy-genome";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
@@ -1443,6 +1445,17 @@ if (recentTrades.length >= 15) {
 
 // ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
 const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
+if (
+  !strategyGenome.isEnabled(
+    metaStrategy
+  )
+) {
+  this.log(
+    `🧬 STRATEGY GENOME BLOCK: ${metaStrategy}`
+  );
+
+  return;
+}
 const metaRegime = regime.regime ?? "UNKNOWN";
 
 const metaApproval = evaluateMetaApproval({
@@ -1961,6 +1974,12 @@ learningEngine.recordTrade({
   strategy: snapSignal.strategy ?? "UNKNOWN",
   confidence: snapSignal.confidence ?? 0,
 });
+
+strategyGenome.recordTrade(
+  snapSignal.strategy ?? "UNKNOWN",
+  won,
+  pnl
+);
 
   // === LEARNING EVOLUTION STATUS ===
 // Evolution is now handled inside learningEngine.recordTrade()
