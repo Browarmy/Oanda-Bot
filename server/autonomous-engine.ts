@@ -51,6 +51,7 @@ import { evaluateAdaptiveExit } from "./adaptive-exit";
 import { marketMemory } from "./market-memory";
 import { strategyGenome } from "./strategy-genome";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
+import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
   newsGuard,
@@ -1203,6 +1204,59 @@ if (crossMarket.confidenceAdjustment !== 0) {
   );
 }
 
+// ── AI PORTFOLIO MANAGER V1 ────────────────────────────────────────────────
+const portfolioManager = evaluatePortfolioCandidate(
+  {
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    regime: regime.regime,
+    strategy: stratSignal.strategy ?? "UNKNOWN",
+  },
+  openTrades.map(t => ({
+    instrument: t.instrument,
+    direction: t.direction,
+    confidence: 0.75,
+    metaScore: 0.5,
+  }))
+);
+
+if (!portfolioManager.approved) {
+  this.log(
+    `🧠 PORTFOLIO MANAGER BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioManager.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "PORTFOLIO",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: stratSignal.strategy ?? "UNKNOWN",
+    regime: regime.regime,
+    reason: `AI portfolio manager block: ${portfolioManager.reason}`,
+  });
+
+  return;
+}
+
+if (portfolioManager.adjustedConfidence !== finalConfidence) {
+  const beforeConfidence = finalConfidence;
+  finalConfidence = portfolioManager.adjustedConfidence;
+
+  this.log(
+    `🧠 PORTFOLIO MANAGER ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${(beforeConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+    portfolioManager.reason
+  );
+} else {
+  this.log(
+    `🧠 PORTFOLIO MANAGER OK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioManager.reason
+  );
+}
+
       // ── NEWS GUARD — block 30min before / 15min after high-impact events ────────
       const newsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
       if (newsCheck.blocked) {
@@ -1425,6 +1479,16 @@ this.log(
 
 // ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
 let effectiveRiskPct = cfg.riskPercent;
+if (portfolioManager.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+  effectiveRiskPct *= portfolioManager.riskMultiplier;
+
+  this.log(
+    `🧠 PORTFOLIO MANAGER RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    portfolioManager.reason
+  );
+}
 const recentTrades = this.state.tradeHistory.slice(-30);
 
 if (recentTrades.length >= 15) {
