@@ -387,24 +387,21 @@ export const appRouter = router({
     }),
 
     // Get learning insights (human-readable)
+// Get learning insights (human-readable)
 getLearningInsights: publicProcedure.query(() => {
   const state = learningEngine.getState();
+
   return {
     insights: state.insights ?? [],
     pairs: state.pairs ?? {},
     sessions: state.sessions ?? [],
     strategies: state.strategies ?? {},
     confidenceBuckets: state.confidenceBuckets ?? {},
-return {
-  insights: state.insights ?? [],
-  pairs: state.pairs ?? {},
-  sessions: state.sessions ?? [],
-  strategies: state.strategies ?? {},
-  confidenceBuckets: state.confidenceBuckets ?? {},
-  regimes: state.regimes ?? {},
-  params: state.params ?? {},
-  totalEvolutions: state.totalEvolutions ?? 0,
-};
+    regimes: state.regimes ?? {},
+    params: state.params ?? {},
+    totalEvolutions: state.totalEvolutions ?? 0,
+  };
+}),
 
 getMemoryDashboard: publicProcedure.query(async () => {
   await marketMemory.load();
@@ -427,10 +424,6 @@ getDecisionJournal: publicProcedure.query(async () => {
     summary: decisionJournal.getStats(),
     analytics: analyseDecisions(all),
     recent: decisionJournal.getRecent(50),
-  };
-}),
-    params: state.params ?? {},
-    totalEvolutions: state.totalEvolutions ?? 0,
   };
 }),
 
