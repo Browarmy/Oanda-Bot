@@ -20,6 +20,22 @@ class MarketMemory {
   private memories: MarketMemoryEntry[] = [];
   private readonly maxMemories = 2000;
 
+getSummary() {
+  const total = this.memories.length;
+  const wins = this.memories.filter(m => m.won).length;
+  const losses = this.memories.filter(m => !m.won).length;
+  const pnl = this.memories.reduce((sum, m) => sum + m.pnl, 0);
+
+  return {
+    total,
+    wins,
+    losses,
+    winRate: total > 0 ? wins / total : 0,
+    pnl,
+    recent: this.getRecent(25),
+  };
+}
+
 async save() {
   await savePersistentState(
     "marketMemory",
