@@ -1,4 +1,4 @@
-import { loadJsonFile, saveJsonFile } from "./persistent-memory";
+import { loadPersistentState, savePersistentState } from "./persistent-memory";
 
 export interface MarketMemoryEntry {
   time: number;
@@ -20,14 +20,12 @@ class MarketMemory {
   private memories: MarketMemoryEntry[] = [];
   private readonly maxMemories = 2000;
 
-  async load() {
-    this.memories = await loadJsonFile<MarketMemoryEntry[]>(
-      "market-memory.json",
-      []
-    );
-
-    this.memories = this.memories.slice(-this.maxMemories);
-  }
+async save() {
+  await savePersistentState(
+    "marketMemory",
+    this.memories.slice(-this.maxMemories)
+  );
+}
 
   async save() {
     await saveJsonFile(
