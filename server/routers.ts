@@ -25,6 +25,9 @@ import { learningEngine } from "./learning-engine";
 import { runBacktest } from "./backtest-engine";
 import { decisionJournal } from "./decision-journal";
 import { analyseDecisions } from "./decision-analytics";
+import { marketMemory } from "./market-memory";
+import { strategyGenome } from "./strategy-genome";
+import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { configureTelegram, getTelegramConfig } from "./telegram-notifier";
 
 const multiBotManager = new MultiBotManager();
@@ -402,6 +405,19 @@ return {
   params: state.params ?? {},
   totalEvolutions: state.totalEvolutions ?? 0,
 };
+
+getMemoryDashboard: publicProcedure.query(async () => {
+  await marketMemory.load();
+  await strategyGenome.load();
+  await strategyRegimeMatrix.load();
+
+  return {
+    marketMemory: marketMemory.getSummary(),
+    strategyGenome: strategyGenome.getSummary(),
+    strategyRegimeMatrix: strategyRegimeMatrix.getSummary(),
+  };
+}),
+
 getDecisionJournal: publicProcedure.query(async () => {
   await decisionJournal.load();
 
