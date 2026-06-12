@@ -116,6 +116,24 @@ this.save().catch(() => {});
     };
   }
 
+getSummary() {
+  const all = this.getAll();
+
+  return {
+    total: all.length,
+    enabled: all.filter(c => c.enabled).length,
+    disabled: all.filter(c => !c.enabled).length,
+    top: all
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10),
+    bottom: all
+      .slice()
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 10),
+  };
+}
+
   getAll() {
     return Array.from(this.cells.values());
   }
