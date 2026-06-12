@@ -1,4 +1,4 @@
-import { loadJsonFile, saveJsonFile } from "./persistent-memory";
+import { loadPersistentState, savePersistentState } from "./persistent-memory";
 
 export interface StrategyRegimeCell {
   key: string;
@@ -17,8 +17,8 @@ class StrategyRegimeMatrix {
   private cells = new Map<string, StrategyRegimeCell>();
 
 async load() {
-  const data = await loadJsonFile<StrategyRegimeCell[]>(
-    "strategy-regime-matrix.json",
+  const data = await loadPersistentState<StrategyRegimeCell[]>(
+    "strategyRegimeMatrix",
     []
   );
 
@@ -28,8 +28,8 @@ async load() {
 }
 
 async save() {
-  await saveJsonFile(
-    "strategy-regime-matrix.json",
+  await savePersistentState(
+    "strategyRegimeMatrix",
     this.getAll()
   );
 }
