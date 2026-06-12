@@ -1,4 +1,4 @@
-import { loadJsonFile, saveJsonFile } from "./persistent-memory";
+import { loadPersistentState, savePersistentState } from "./persistent-memory";
 
 export interface StrategyGenome {
   name: string;
@@ -16,14 +16,10 @@ export interface StrategyGenome {
 
 export class StrategyGenomeEngine {
 
-async load() {
-  const data = await loadJsonFile<StrategyGenome[]>(
-    "strategy-genome.json",
-    []
-  );
-
-  this.genomes = new Map(
-    data.map(g => [g.name, g])
+async save() {
+  await savePersistentState(
+    "strategyGenome",
+    this.getAll()
   );
 }
 
