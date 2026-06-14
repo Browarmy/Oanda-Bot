@@ -437,7 +437,7 @@ export function detectRegime(m15: Candle[], h1: Candle[]): RegimeAnalysis {
     riskMood,
   };
 }
-}
+
 
 // ─── Strategy 1: Trend Following ──────────────────────────────────────────────
 
