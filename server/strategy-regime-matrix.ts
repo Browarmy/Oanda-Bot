@@ -16,23 +16,18 @@ export interface StrategyRegimeCell {
 class StrategyRegimeMatrix {
   private cells = new Map<string, StrategyRegimeCell>();
 
-async load() {
-  const data = await loadPersistentState<StrategyRegimeCell[]>(
-    "strategyRegimeMatrix",
-    []
-  );
+  async load() {
+    const data = await loadPersistentState<StrategyRegimeCell[]>(
+      "strategyRegimeMatrix",
+      []
+    );
 
-  this.cells = new Map(
-    data.map(c => [c.key, c])
-  );
-}
+    this.cells = new Map(data.map(c => [c.key, c]));
+  }
 
-async save() {
-  await savePersistentState(
-    "strategyRegimeMatrix",
-    this.getAll()
-  );
-}
+  async save() {
+    await savePersistentState("strategyRegimeMatrix", this.getAll());
+  }
 
   private key(strategy: string, regime: string) {
     return `${strategy}__${regime}`;
@@ -63,6 +58,7 @@ async save() {
     const cell = this.get(strategy, regime);
 
     cell.trades++;
+
     if (won) cell.wins++;
     else cell.losses++;
 
@@ -70,6 +66,7 @@ async save() {
     cell.winRate = cell.wins / Math.max(1, cell.trades);
 
     const pnlScore = cell.pnl > 0 ? 0.75 : 0.25;
+
     cell.score = Math.max(
       0,
       Math.min(1, cell.winRate * 0.7 + pnlScore * 0.3)
@@ -82,9 +79,9 @@ async save() {
     if (cell.score >= 0.5) {
       cell.enabled = true;
     }
-  }
 
-this.save().catch(() => {});
+    this.save().catch(() => {});
+  }
 
   shouldBlock(strategy: string, regime: string) {
     const cell = this.get(strategy, regime);
@@ -102,7 +99,8 @@ this.save().catch(() => {});
         blocked: true,
         reason:
           `${strategy} in ${regime} disabled | ` +
-          `${cell.wins}W/${cell.losses}L | score ${(cell.score * 100).toFixed(0)}%`,
+          `${cell.wins}W/${cell.losses}L | ` +
+          `score ${(cell.score * 100).toFixed(0)}%`,
         cell,
       };
     }
@@ -111,31 +109,32 @@ this.save().catch(() => {});
       blocked: false,
       reason:
         `${strategy} in ${regime}: ` +
-        `${cell.wins}W/${cell.losses}L | score ${(cell.score * 100).toFixed(0)}%`,
+        `${cell.wins}W/${cell.losses}L | ` +
+        `score ${(cell.score * 100).toFixed(0)}%`,
       cell,
     };
   }
 
-getSummary() {
-  const all = this.getAll();
-
-  return {
-    total: all.length,
-    enabled: all.filter(c => c.enabled).length,
-    disabled: all.filter(c => !c.enabled).length,
-    top: all
-      .slice()
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10),
-    bottom: all
-      .slice()
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 10),
-  };
-}
-
   getAll() {
     return Array.from(this.cells.values());
+  }
+
+  getSummary() {
+    const all = this.getAll();
+
+    return {
+      total: all.length,
+      enabled: all.filter(c => c.enabled).length,
+      disabled: all.filter(c => !c.enabled).length,
+      top: all
+        .slice()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10),
+      bottom: all
+        .slice()
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 10),
+    };
   }
 }
 
