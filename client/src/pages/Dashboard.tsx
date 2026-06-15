@@ -123,6 +123,15 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     enabled: isConnected && tab === "ai",
     refetchInterval: 2000,
   });
+const { data: memoryDashboard } = trpc.bot.getMemoryDashboard.useQuery(undefined, {
+  enabled: isConnected && tab === "ai",
+  refetchInterval: 10000,
+});
+
+const { data: decisionJournal } = trpc.bot.getDecisionJournal.useQuery(undefined, {
+  enabled: isConnected && tab === "ai",
+  refetchInterval: 10000,
+});
   const { data: readiness } = trpc.bot.getFundedReadiness.useQuery(undefined, {
     enabled: isConnected && tab === "ai",
     refetchInterval: 2000,
@@ -817,6 +826,130 @@ const dailyProfitFactor =
                 </div>
               </div>
             )}
+
+{memoryDashboard && (
+  <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+    <SectionTitle>🧠 Engine Brain</SectionTitle>
+
+    <div className="grid grid-cols-2 gap-3 mb-3">
+      <StatPill
+        label="Memory Trades"
+        value={String(memoryDashboard.marketMemory?.total ?? 0)}
+        color={C.blue}
+        sub={`${((memoryDashboard.marketMemory?.winRate ?? 0) * 100).toFixed(0)}% WR`}
+      />
+
+      <StatPill
+        label="Genome"
+        value={String(memoryDashboard.strategyGenome?.enabled ?? 0)}
+        color={C.green}
+        sub={`${memoryDashboard.strategyGenome?.disabled ?? 0} disabled`}
+      />
+
+      <StatPill
+        label="Matrix Cells"
+        value={String(memoryDashboard.strategyRegimeMatrix?.total ?? 0)}
+        color={C.amber}
+        sub={`${memoryDashboard.strategyRegimeMatrix?.enabled ?? 0} active`}
+      />
+
+      <StatPill
+        label="Memory P&L"
+        value={`${(memoryDashboard.marketMemory?.pnl ?? 0) >= 0 ? "+" : ""}${(memoryDashboard.marketMemory?.pnl ?? 0).toFixed(2)}`}
+        color={(memoryDashboard.marketMemory?.pnl ?? 0) >= 0 ? C.green : C.red}
+      />
+    </div>
+
+    {(memoryDashboard.strategyGenome?.top ?? []).length > 0 && (
+      <div className="rounded-2xl p-3 mb-3" style={{ background: C.s2 }}>
+        <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>
+          Top Strategies
+        </p>
+
+        <div className="space-y-2">
+          {memoryDashboard.strategyGenome.top.slice(0, 5).map((g: any) => (
+            <div key={g.name} className="flex items-center justify-between">
+              <span className="text-xs font-bold" style={{ color: C.text }}>{g.name}</span>
+              <span className="text-xs font-mono" style={{ color: g.enabled ? C.green : C.red }}>
+                {g.trades} trades · {g.score.toFixed(0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {(memoryDashboard.strategyRegimeMatrix?.top ?? []).length > 0 && (
+      <div className="rounded-2xl p-3" style={{ background: C.s2 }}>
+        <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>
+          Best Strategy / Regime Combos
+        </p>
+
+        <div className="space-y-2">
+          {memoryDashboard.strategyRegimeMatrix.top.slice(0, 5).map((c: any) => (
+            <div key={c.key} className="flex items-center justify-between">
+              <span className="text-xs font-bold" style={{ color: C.text }}>
+                {c.strategy} / {c.regime}
+              </span>
+              <span className="text-xs font-mono" style={{ color: c.enabled ? C.green : C.red }}>
+                {c.wins}W/{c.losses}L · {(c.score * 100).toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+{decisionJournal && (
+  <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+    <SectionTitle>🧾 Decision Intelligence</SectionTitle>
+
+    <div className="grid grid-cols-2 gap-3 mb-3">
+      <StatPill
+        label="Decisions"
+        value={String(decisionJournal.analytics?.total ?? 0)}
+        color={C.blue}
+      />
+
+      <StatPill
+        label="Block Rate"
+        value={`${((decisionJournal.analytics?.blockRate ?? 0) * 100).toFixed(0)}%`}
+        color={(decisionJournal.analytics?.blockRate ?? 0) > 0.5 ? C.red : C.amber}
+      />
+
+      <StatPill
+        label="Approval Rate"
+        value={`${((decisionJournal.analytics?.approvalRate ?? 0) * 100).toFixed(0)}%`}
+        color={C.green}
+      />
+
+      <StatPill
+        label="Avg Meta"
+        value={`${((decisionJournal.analytics?.avgMetaScore ?? 0) * 100).toFixed(0)}%`}
+        color={C.amber}
+      />
+    </div>
+
+    <div className="rounded-2xl p-3" style={{ background: C.s2 }}>
+      <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>
+        Recent Decisions
+      </p>
+
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {(decisionJournal.recent ?? []).slice(0, 10).map((d: any) => (
+          <div key={d.id} className="text-xs leading-relaxed" style={{ color: C.mutedLight }}>
+            <span style={{ color: d.type === "BLOCKED" ? C.red : d.type === "EXECUTED" ? C.green : C.amber }}>
+              {d.type}
+            </span>{" "}
+            {d.instrument?.replace("_", "/")} {d.direction} · {d.stage} · {d.reason}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
 {learning && (
   <div

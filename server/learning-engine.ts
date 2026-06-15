@@ -68,23 +68,77 @@ export interface SignalParams {
 
 export interface TradePattern {
   rsi: number;
-  macd: number;            // positive/negative normalised
-  bbPosition: number;      // 0-1
-  atrNorm: number;         // ATR / price (normalised)
-  emaSpread: number;       // (ema9 - ema21) / ema21
+  macd: number;
+  bbPosition: number;
+  atrNorm: number;
+  emaSpread: number;
   hour: number;
   won: boolean;
   pnl: number;
+  strategy?: string;
+  regime?: string;
+  instrument?: string;
+  confidence?: number;
+  confidenceBucket?: string;
+}
+
+export interface StrategyLearning {
+  strategy: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  score: number;
+  enabled: boolean;
+  lastUpdated: number;
+}
+
+export interface ConfidenceBucketLearning {
+  bucket: string;
+  minConfidence: number;
+  maxConfidence: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  calibratedScore: number;
+  lastUpdated: number;
+}
+
+export interface RegimeLearning {
+  regime: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgPnl: number;
+  grossProfit: number;
+  grossLoss: number;
+  profitFactor: number;
+  score: number;
+  enabled: boolean;
+  lastUpdated: number;
 }
 
 export interface LearningState {
   pairs: Record<string, PairLearning>;
   sessions: SessionLearning[];
+  strategies: Record<string, StrategyLearning>;
+  confidenceBuckets: Record<string, ConfidenceBucketLearning>;
+  regimes: Record<string, RegimeLearning>;
   params: SignalParams;
   patterns: TradePattern[];
   totalEvolutions: number;
   lastEvolution: number;
-  insights: string[];      // human-readable insights the bot has learned
+  insights: string[];
 }
 
 // ─── Default state ────────────────────────────────────────────────────────────
@@ -130,13 +184,138 @@ function defaultSessionLearning(hour: number): SessionLearning {
   };
 }
 
+function defaultStrategyLearning(strategy: string): StrategyLearning {
+  return {
+    strategy,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0.5,
+    avgPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: 1.0,
+    score: 0.5,
+    enabled: true,
+    lastUpdated: Date.now(),
+  };
+}
+
+function getConfidenceBucketName(confidence: number): string {
+  const pct = Math.max(0, Math.min(99, Math.floor(confidence * 100)));
+  const bucketStart = Math.floor(pct / 10) * 10;
+  const bucketEnd = bucketStart + 10;
+  return `${bucketStart}-${bucketEnd}`;
+}
+
+function defaultConfidenceBucket(bucket: string): ConfidenceBucketLearning {
+  const [minRaw, maxRaw] = bucket.split("-").map(Number);
+
+  return {
+    bucket,
+    minConfidence: minRaw / 100,
+    maxConfidence: maxRaw / 100,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0.5,
+    avgPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: 1.0,
+    calibratedScore: 0.5,
+    lastUpdated: Date.now(),
+  };
+}
+
+function computeConfidenceCalibrationScore(
+  bucket: ConfidenceBucketLearning
+): number {
+  if (bucket.trades < 5) return 0.5;
+
+  const expectedMidpoint =
+    (bucket.minConfidence + bucket.maxConfidence) / 2;
+
+  const accuracyGap =
+    Math.abs(bucket.winRate - expectedMidpoint);
+
+  const reliabilityScore =
+    Math.max(0, 1 - accuracyGap * 2);
+
+  const pfScore =
+    Math.min(bucket.profitFactor / 2.5, 1);
+
+  const pnlScore =
+    bucket.avgPnl > 0 ? 0.75 : 0.25;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      reliabilityScore * 0.45 +
+      pfScore * 0.35 +
+      pnlScore * 0.20
+    )
+  );
+}
+
+function computeStrategyScore(strategy: StrategyLearning): number {
+  if (strategy.trades < 5) return 0.5;
+
+  const wrScore = strategy.winRate;
+  const pfScore = Math.min(strategy.profitFactor / 2.5, 1);
+  const pnlScore = strategy.avgPnl > 0 ? 0.75 : 0.25;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      wrScore * 0.45 + pfScore * 0.35 + pnlScore * 0.20
+    )
+  );
+}
+
+function defaultRegimeLearning(regime: string): RegimeLearning {
+  return {
+    regime,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0.5,
+    avgPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: 1.0,
+    score: 0.5,
+    enabled: true,
+    lastUpdated: Date.now(),
+  };
+}
+
+function computeRegimeScore(regime: RegimeLearning): number {
+  if (regime.trades < 5) return 0.5;
+
+  const wrScore = regime.winRate;
+  const pfScore = Math.min(regime.profitFactor / 2.5, 1);
+  const pnlScore = regime.avgPnl > 0 ? 0.75 : 0.25;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      wrScore * 0.45 + pfScore * 0.35 + pnlScore * 0.20
+    )
+  );
+}
+
 // ─── Learning Engine ──────────────────────────────────────────────────────────
 
 export class LearningEngine {
   private state: LearningState;
   private dirty = false;
   private saveTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly EVOLUTION_MIN_TRADES = 20;  // evolve params after N trades
+  private readonly EVOLUTION_MIN_TRADES = 20;  // evolve params after N new learned trades
+  private lastEvolutionTradeCount = 0;
   private readonly PAIR_DISABLE_THRESHOLD = 0.35;  // disable pair if win rate < 35%
   private readonly PAIR_ENABLE_THRESHOLD = 0.45;   // re-enable if win rate recovers to 45%
   private readonly MAX_PATTERNS = 500;
@@ -145,6 +324,9 @@ export class LearningEngine {
     this.state = {
       pairs: {},
       sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
+      strategies: {},
+      confidenceBuckets: {},
+      regimes: {},
       params: { ...DEFAULT_PARAMS },
       patterns: [],
       totalEvolutions: 0,
@@ -165,14 +347,18 @@ export class LearningEngine {
         try {
           const parsed = JSON.parse(row.value);
           if (row.key === "pairs") this.state.pairs = parsed;
-          if (row.key === "sessions") this.state.sessions = parsed;
-          if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
+if (row.key === "sessions") this.state.sessions = parsed;
+if (row.key === "strategies") this.state.strategies = parsed;
+if (row.key === "confidenceBuckets") this.state.confidenceBuckets = parsed;
+if (row.key === "regimes") this.state.regimes = parsed;
+if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
           if (row.key === "patterns") this.state.patterns = parsed;
-          if (row.key === "meta") {
-            this.state.totalEvolutions = parsed.totalEvolutions ?? 0;
-            this.state.lastEvolution = parsed.lastEvolution ?? Date.now();
-            this.state.insights = parsed.insights ?? [];
-          }
+ if (row.key === "meta") {
+  this.state.totalEvolutions = parsed.totalEvolutions ?? 0;
+  this.state.lastEvolution = parsed.lastEvolution ?? Date.now();
+  this.state.insights = parsed.insights ?? [];
+  this.lastEvolutionTradeCount = parsed.lastEvolutionTradeCount ?? 0;
+}
         } catch { /* skip malformed */ }
       }
       console.log(`[Learning] Loaded state: ${Object.keys(this.state.pairs).length} pairs, ${this.state.patterns.length} patterns, v${this.state.params.version}`);
@@ -197,14 +383,18 @@ export class LearningEngine {
         `);
       };
       await upsert("pairs", this.state.pairs);
-      await upsert("sessions", this.state.sessions);
-      await upsert("params", this.state.params);
+await upsert("sessions", this.state.sessions);
+await upsert("strategies", this.state.strategies);
+await upsert("confidenceBuckets", this.state.confidenceBuckets);
+await upsert("regimes", this.state.regimes);
+await upsert("params", this.state.params);
       await upsert("patterns", this.state.patterns.slice(-this.MAX_PATTERNS));
-      await upsert("meta", {
-        totalEvolutions: this.state.totalEvolutions,
-        lastEvolution: this.state.lastEvolution,
-        insights: this.state.insights.slice(-50),
-      });
+await upsert("meta", {
+  totalEvolutions: this.state.totalEvolutions,
+  lastEvolution: this.state.lastEvolution,
+  lastEvolutionTradeCount: this.lastEvolutionTradeCount,
+  insights: this.state.insights.slice(-50),
+});
       this.dirty = false;
     } catch (e: any) {
       console.log(`[Learning] Save failed: ${e.message}`);
@@ -227,7 +417,10 @@ export class LearningEngine {
     ema9: number;
     ema21: number;
     openTime: number;
-    closedAt: number;
+closedAt: number;
+strategy?: string;
+regime?: string;
+confidence?: number;
   }) {
     const hour = new Date(trade.openTime).getUTCHours();
 
@@ -294,42 +487,203 @@ export class LearningEngine {
     }
     sess.lastUpdated = Date.now();
 
+// 2b. Update strategy learning
+const strategyName = trade.strategy ?? "UNKNOWN";
+
+if (!this.state.strategies[strategyName]) {
+  this.state.strategies[strategyName] = defaultStrategyLearning(strategyName);
+}
+
+const strat = this.state.strategies[strategyName];
+strat.trades++;
+
+if (trade.won) {
+  strat.wins++;
+  strat.grossProfit += Math.max(0, trade.pnl);
+} else {
+  strat.losses++;
+  strat.grossLoss += Math.abs(Math.min(0, trade.pnl));
+}
+
+strat.winRate = strat.wins / Math.max(1, strat.trades);
+strat.avgPnl = ema1([strat.avgPnl, trade.pnl], 0.2);
+strat.profitFactor =
+  strat.grossLoss > 0
+    ? strat.grossProfit / strat.grossLoss
+    : strat.grossProfit > 0
+      ? 99
+      : 1;
+
+strat.score = computeStrategyScore(strat);
+strat.lastUpdated = Date.now();
+
+if (strat.trades >= 10 && strat.score < 0.35 && strat.enabled) {
+  strat.enabled = false;
+  this.addInsight(
+    `🚫 Strategy ${strategyName} disabled — score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}%`
+  );
+}
+
+if (strat.trades >= 10 && strat.score >= 0.45 && !strat.enabled) {
+  strat.enabled = true;
+  this.addInsight(
+    `✅ Strategy ${strategyName} re-enabled — score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}%`
+  );
+}
+
+// 2c. Update confidence calibration
+
+const confidence = Math.max(0, Math.min(0.99, trade.confidence ?? 0));
+const confidenceBucketName = getConfidenceBucketName(confidence);
+
+if (!this.state.confidenceBuckets[confidenceBucketName]) {
+  this.state.confidenceBuckets[confidenceBucketName] =
+    defaultConfidenceBucket(confidenceBucketName);
+}
+
+const bucket = this.state.confidenceBuckets[confidenceBucketName];
+
+bucket.trades++;
+
+if (trade.won) {
+  bucket.wins++;
+  bucket.grossProfit += Math.max(0, trade.pnl);
+} else {
+  bucket.losses++;
+  bucket.grossLoss += Math.abs(Math.min(0, trade.pnl));
+}
+
+bucket.winRate = bucket.wins / Math.max(1, bucket.trades);
+bucket.avgPnl = ema1([bucket.avgPnl, trade.pnl], 0.2);
+bucket.profitFactor =
+  bucket.grossLoss > 0
+    ? bucket.grossProfit / bucket.grossLoss
+    : bucket.grossProfit > 0
+      ? 99
+      : 1;
+
+bucket.calibratedScore = computeConfidenceCalibrationScore(bucket);
+bucket.lastUpdated = Date.now();
+
+if (bucket.trades === 10) {
+  this.addInsight(
+    `🎯 Confidence ${bucket.bucket}% calibrated: WR ${(bucket.winRate * 100).toFixed(0)}%, PF ${bucket.profitFactor.toFixed(2)}`
+  );
+}
+
+// 2d. Update regime learning
+const regimeName = trade.regime ?? "UNKNOWN";
+
+if (!this.state.regimes[regimeName]) {
+  this.state.regimes[regimeName] = defaultRegimeLearning(regimeName);
+}
+
+const regimeLearning = this.state.regimes[regimeName];
+
+regimeLearning.trades++;
+
+if (trade.won) {
+  regimeLearning.wins++;
+  regimeLearning.grossProfit += Math.max(0, trade.pnl);
+} else {
+  regimeLearning.losses++;
+  regimeLearning.grossLoss += Math.abs(Math.min(0, trade.pnl));
+}
+
+regimeLearning.winRate =
+  regimeLearning.wins / Math.max(1, regimeLearning.trades);
+
+regimeLearning.avgPnl =
+  ema1([regimeLearning.avgPnl, trade.pnl], 0.2);
+
+regimeLearning.profitFactor =
+  regimeLearning.grossLoss > 0
+    ? regimeLearning.grossProfit / regimeLearning.grossLoss
+    : regimeLearning.grossProfit > 0
+      ? 99
+      : 1;
+
+regimeLearning.score = computeRegimeScore(regimeLearning);
+regimeLearning.lastUpdated = Date.now();
+
+if (
+  regimeLearning.trades >= 10 &&
+  regimeLearning.score < 0.35 &&
+  regimeLearning.enabled
+) {
+  regimeLearning.enabled = false;
+  this.addInsight(
+    `🚫 Regime ${regimeName} disabled — score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}%`
+  );
+}
+
+if (
+  regimeLearning.trades >= 10 &&
+  regimeLearning.score >= 0.45 &&
+  !regimeLearning.enabled
+) {
+  regimeLearning.enabled = true;
+  this.addInsight(
+    `✅ Regime ${regimeName} re-enabled — score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}%`
+  );
+}
+
     // 3. Store pattern
     const atrNorm = trade.entryPrice > 0 ? trade.atr / trade.entryPrice : 0;
     const emaSpread = trade.ema21 > 0 ? (trade.ema9 - trade.ema21) / trade.ema21 : 0;
-    this.state.patterns.push({
-      rsi: trade.rsi,
-      macd: trade.macd,
-      bbPosition: trade.bbPosition,
-      atrNorm,
-      emaSpread,
-      hour,
-      won: trade.won,
-      pnl: trade.pnl,
-    });
+this.state.patterns.push({
+  rsi: trade.rsi,
+  macd: trade.macd,
+  bbPosition: trade.bbPosition,
+  atrNorm,
+  emaSpread,
+  hour,
+  won: trade.won,
+  pnl: trade.pnl,
+  strategy: trade.strategy ?? "UNKNOWN",
+  regime: trade.regime ?? "UNKNOWN",
+  instrument: trade.instrument,
+  confidence,
+  confidenceBucket: confidenceBucketName,
+});
     if (this.state.patterns.length > this.MAX_PATTERNS) {
       this.state.patterns.shift();
     }
 
     this.dirty = true;
 
-    // 4. Evolve parameters if enough new trades
-    const totalTrades = Object.values(this.state.pairs).reduce((s, p) => s + p.trades, 0);
-    if (totalTrades > 0 && totalTrades % this.EVOLUTION_MIN_TRADES === 0) {
-      this.evolveParams();
-    }
+// 4. Evolve parameters reliably after enough NEW learned trades.
+// Do not use modulo. Modulo can miss evolution after restarts or skipped events.
+const totalTrades = this.getTotalLearnedTrades();
+const tradesSinceEvolution = totalTrades - this.lastEvolutionTradeCount;
+
+if (tradesSinceEvolution >= this.EVOLUTION_MIN_TRADES) {
+  this.evolve("auto");
+}
   }
 
   // ── Parameter evolution — the core "self-learning" ───────────────────────
 
-  private evolveParams() {
-    const patterns = this.state.patterns;
-    if (patterns.length < 15) return;
+public evolve(reason: "auto" | "manual" | "startup" = "manual"): boolean {
+const patterns = this.state.patterns;
+const totalTrades = this.getTotalLearnedTrades();
 
-    const wins = patterns.filter(p => p.won);
-    const losses = patterns.filter(p => !p.won);
-    if (wins.length < 5 || losses.length < 5) return;
+if (patterns.length < 15) {
+  this.addInsight(`⚠ Evolution skipped (${reason}) — only ${patterns.length}/15 patterns available`);
+  console.log(`[Learning] Evolution skipped (${reason}) — only ${patterns.length}/15 patterns available`);
+  return false;
+}
 
+const wins = patterns.filter(p => p.won);
+const losses = patterns.filter(p => !p.won);
+
+if (wins.length < 5 || losses.length < 5) {
+  this.addInsight(`⚠ Evolution skipped (${reason}) — needs at least 5 wins and 5 losses. Current: ${wins.length}W/${losses.length}L`);
+  console.log(`[Learning] Evolution skipped (${reason}) — insufficient win/loss mix: ${wins.length}W/${losses.length}L`);
+  this.lastEvolutionTradeCount = totalTrades;
+  this.dirty = true;
+  return false;
+}
     const prev = { ...this.state.params };
     const p = this.state.params;
 
@@ -387,7 +741,9 @@ export class LearningEngine {
     const insight = `🧠 Evolution v${p.version}: ${rsiChange} | ${slChange} | ${confChange} | WR ${(overallWinRate * 100).toFixed(0)}% | Best hours: ${bestHours.slice(0, 4).join(',')}h UTC`;
     this.addInsight(insight);
     console.log(`[Learning] ${insight}`);
-    this.dirty = true;
+this.lastEvolutionTradeCount = totalTrades;
+this.dirty = true;
+return true;
   }
 
   // ── Getters used by the engine ────────────────────────────────────────────
@@ -428,6 +784,23 @@ export class LearningEngine {
       .slice(0, n);
   }
 
+getStrategyLearning(strategy: string): StrategyLearning {
+  return this.state.strategies[strategy] ?? defaultStrategyLearning(strategy);
+}
+
+isStrategyEnabled(strategy: string): boolean {
+  const s = this.state.strategies[strategy];
+  if (!s) return true;
+  return s.enabled;
+}
+
+getTopStrategies(n = 5): StrategyLearning[] {
+  return Object.values(this.state.strategies)
+    .filter(s => s.trades >= 3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n);
+}
+
   getWorstPairs(n = 5): PairLearning[] {
     return Object.values(this.state.pairs)
       .filter(p => p.trades >= 3)
@@ -441,6 +814,68 @@ export class LearningEngine {
       .sort((a, b) => b.winRate - a.winRate)
       .slice(0, 6);
   }
+
+getTotalLearnedTrades(): number {
+  return Object.values(this.state.pairs).reduce((sum, pair) => sum + pair.trades, 0);
+}
+
+getEvolutionStatus() {
+  const totalTrades = this.getTotalLearnedTrades();
+  const tradesSinceEvolution = totalTrades - this.lastEvolutionTradeCount;
+  const tradesRemaining = Math.max(0, this.EVOLUTION_MIN_TRADES - tradesSinceEvolution);
+
+  return {
+    totalLearnedTrades: totalTrades,
+    lastEvolutionTradeCount: this.lastEvolutionTradeCount,
+    tradesSinceEvolution,
+    tradesRemaining,
+    evolutionInterval: this.EVOLUTION_MIN_TRADES,
+    currentVersion: this.state.params.version,
+    totalEvolutions: this.state.totalEvolutions,
+    lastEvolution: this.state.lastEvolution,
+  };
+}
+
+getConfidenceBuckets(): ConfidenceBucketLearning[] {
+  return Object.values(this.state.confidenceBuckets)
+    .sort((a, b) => a.minConfidence - b.minConfidence);
+}
+
+getBestConfidenceBuckets(n = 3): ConfidenceBucketLearning[] {
+  return Object.values(this.state.confidenceBuckets)
+    .filter(b => b.trades >= 5)
+    .sort((a, b) => b.calibratedScore - a.calibratedScore)
+    .slice(0, n);
+}
+
+getConfidenceCalibration(confidence: number): ConfidenceBucketLearning {
+  const bucketName = getConfidenceBucketName(confidence);
+  return this.state.confidenceBuckets[bucketName] ?? defaultConfidenceBucket(bucketName);
+}
+
+getRegimeLearning(regime: string): RegimeLearning {
+  return this.state.regimes[regime] ?? defaultRegimeLearning(regime);
+}
+
+isRegimeEnabled(regime: string): boolean {
+  const r = this.state.regimes[regime];
+  if (!r) return true;
+  return r.enabled;
+}
+
+getTopRegimes(n = 5): RegimeLearning[] {
+  return Object.values(this.state.regimes)
+    .filter(r => r.trades >= 3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n);
+}
+
+getWorstRegimes(n = 5): RegimeLearning[] {
+  return Object.values(this.state.regimes)
+    .filter(r => r.trades >= 3)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, n);
+}
 
   private addInsight(msg: string) {
     this.state.insights.unshift(`[${new Date().toISOString().slice(0, 16)}] ${msg}`);

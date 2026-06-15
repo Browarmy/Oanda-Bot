@@ -20,9 +20,11 @@
  * - Scan only top 15 FX pairs (not 40 instruments)
  */
 import { EventEmitter } from "events";
-import { ENV } from "./_core/env";
 import { learningEngine } from "./learning-engine";
-import { notifyTradeOpen, notifyTradeClose, notifyDailyLossGuard, notifyBotStatus, notifyPropFirmAlert } from "./telegram-notifier";
+import {
+  notifyTradeOpen,
+  notifyTradeClose,
+} from "./telegram-notifier";
 import {
   detectRegime,
   selectStrategy,
@@ -37,6 +39,19 @@ import {
   type MarketRegime,
   type WalkForwardResult,
 } from "./strategy-engine";
+import { analysePortfolioIntelligence } from "./portfolio-intelligence";
+import { evaluateMetaApproval } from "./meta-approval";
+import { calculateDynamicRisk } from "./dynamic-risk";
+import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
+import { decisionJournal } from "./decision-journal";
+import { evaluateRegimeRisk } from "./regime-risk-governor";
+import { strategyGenome } from "./strategy-genome";
+import { marketMemory } from "./market-memory";
+import { strategyRegimeMatrix } from "./strategy-regime-matrix";
+import { evaluateAdaptiveExit } from "./adaptive-exit";
+import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
+import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
+import { evaluateSafetyGovernor } from "./safety-governor";
 import {
   newsGuard,
   checkFvgRetest,
@@ -84,18 +99,66 @@ export interface ClosedTrade {
   pips: number;
   won: boolean;
   closeReason: string;
+  regime?: string;
+  strategy?: string;
 }
 
 export interface OpenTrade {
+
   id: string;
+
   instrument: string;
+
   direction: "BUY" | "SELL";
+
   units: number;
+
   entryPrice: number;
+
   stopLoss: number;
+
   takeProfit: number;
+
   openTime: number;
+
   unrealisedPnl: number;
+
+  _signal?: {
+
+    rsi?: number;
+
+    macd?: number;
+
+    bbPosition?: number;
+
+    atr?: number;
+
+    ema9?: number;
+
+    ema21?: number;
+
+    regime?: string;
+
+    regimeConfidence?: number;
+
+    riskMood?: string;
+
+    trendScore?: number;
+
+    rangeScore?: number;
+
+    breakoutScore?: number;
+
+    volatilityScore?: number;
+
+    strategy?: string;
+
+    confidence?: number;
+
+    metaScore?: number;
+
+  };
+
 }
 
 interface PairStats {
@@ -115,12 +178,6 @@ interface PairStats {
   enabled: boolean;
 }
 
-interface AdaptiveWeights {
-  minConfidence: number;
-  wins: number;
-  losses: number;
-  consecutiveLosses: number;
-}
 
 export type MarketSession = "ALL" | "LONDON" | "NEW_YORK" | "TOKYO" | "SYDNEY" | "LONDON_NY";
 
@@ -587,10 +644,11 @@ function calculateUnits(
 
 // ─── Main Engine ──────────────────────────────────────────────────────────────
 export class AutonomousEngine extends EventEmitter {
-    public api: any | null = null;   // Original
+  public api: OandaAPI | null = null;
+  private partialTpTaken: Set<string> = new Set();
+  private breakevenSet: Set<string> = new Set();
   private state: EngineState;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
-  private adaptiveWeights: Map<string, AdaptiveWeights> = new Map();
   private scanning = false;
   private previousOpenTradeIds: Set<string> = new Set();
   private openTradeSnapshots: Map<string, OpenTrade> = new Map();
@@ -639,12 +697,6 @@ export class AutonomousEngine extends EventEmitter {
       tradeHistory: [],
     };
 
-    for (const pair of ALL_PAIRS) {
-      this.adaptiveWeights.set(pair, {
-        minConfidence: 0.78,
-        wins: 0, losses: 0, consecutiveLosses: 0,
-      });
-    }
 
     // Initialize Sets for trailing stop management (required for esbuild compatibility)
     this.partialTpTaken = new Set<string>();
@@ -665,6 +717,10 @@ export class AutonomousEngine extends EventEmitter {
     this.log("🚀 Bot v4 STARTED — quality signals, 1% risk, max 3 trades");
     // Load persisted learning state from DB
     await learningEngine.load();
+await decisionJournal.load();
+await marketMemory.load();
+await strategyGenome.load();
+await strategyRegimeMatrix.load();
     const lp = learningEngine.getParams();
     this.state.config.rsiLower = lp.rsiLower;
     this.state.config.rsiUpper = lp.rsiUpper;
@@ -672,6 +728,15 @@ export class AutonomousEngine extends EventEmitter {
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
+    const evoStatus = learningEngine.getEvolutionStatus?.();
+    if (evoStatus) {
+    this.log(
+    `🧬 Learning status: v${evoStatus.currentVersion} | ` +
+    `${evoStatus.totalLearnedTrades} learned trades | ` +
+    `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} toward next evolution`
+  );
+}
+
 
         try {
       const acct = await this.api.getAccount();
@@ -721,42 +786,16 @@ export class AutonomousEngine extends EventEmitter {
       ? (this.state.totalPnl / this.state.totalTrades).toFixed(2) 
       : "0";
 
-    this.log(`📊 DAILY SUMMARY | Trades: ${this.state.totalTrades} | Win Rate: ${winRate}% | Total P&L: ${this.state.totalPnl.toFixed(2)} | Expectancy: ${expectancy} | Equity: ${this.state.accountEquity.toFixed(2)}`);
+this.log(
+  `📊 DAILY SUMMARY | Trades: ${this.state.totalTrades} | Win Rate: ${winRate}% | Total P&L: ${this.state.totalPnl.toFixed(2)} | Expectancy: ${expectancy} | Equity: ${this.state.accountEquity.toFixed(2)}`
+);
 
-    // === SAFE DAILY STATS TO DATABASE (Prevents Crash) ===
-    try {
-      if (typeof db !== 'undefined' && typeof dailyStats !== 'undefined') {
-        const winRateNum = this.state.totalTrades > 0 
-          ? ((this.state.totalWins / this.state.totalTrades) * 100) 
-          : 0;
-        const expectancyNum = this.state.totalTrades > 0 
-          ? (this.state.totalPnl / this.state.totalTrades) 
-          : 0;
+// Start scanning
+this.scanTimer = setInterval(() => this.scanAllPairs(), SCAN_INTERVAL_MS);
+this.scanAllPairs();
+}
 
-        await db.insert(dailyStats).values({
-          date: new Date(),
-          totalTrades: this.state.totalTrades,
-          totalWins: this.state.totalWins,
-          totalLosses: this.state.totalLosses || 0,
-          totalPnl: this.state.totalPnl.toString(),
-          winRate: winRateNum.toFixed(2),
-          expectancy: expectancyNum.toFixed(2),
-          equity: this.state.accountEquity.toString(),
-        }).onConflictDoNothing();
-
-        this.log(`📊 DAILY STATS SAVED TO DB`);
-      } else {
-        this.log(`📊 DB not available — daily stats logged to console only`);
-      }
-    } catch (e: any) {
-      this.log(`⚠️ Could not save to DB (safe): ${e.message}`);
-    }
-
-    this.scanTimer = setInterval(() => this.scanAllPairs(), SCAN_INTERVAL_MS);
-    this.scanAllPairs();
-  }
-
-  stop() {
+stop() {
     if (this.scanTimer) { 
       clearInterval(this.scanTimer); 
       this.scanTimer = null; 
@@ -1008,6 +1047,15 @@ if (cutoff > 0) {
       // ── Regime detection ──────────────────────────────────────────────────────
       const regime = detectRegime(m15, h1);
       this.currentRegimes.set(pairStat.instrument, regime.regime);
+this.log(
+  `🧭 REGIME ${pairStat.instrument}: ${regime.regime} ` +
+  `conf ${(regime.regimeConfidence * 100).toFixed(0)}% | ` +
+  `trend ${(regime.trendScore * 100).toFixed(0)}% | ` +
+  `range ${(regime.rangeScore * 100).toFixed(0)}% | ` +
+  `breakout ${(regime.breakoutScore * 100).toFixed(0)}% | ` +
+  `vol ${(regime.volatilityScore * 100).toFixed(0)}% | ` +
+  `${regime.riskMood}`
+);
 
       // ── Walk-forward optimised params for this pair ───────────────────────────
       const wf = this.wfResults.get(pairStat.instrument);
@@ -1122,6 +1170,100 @@ if (cutoff > 0) {
         this.log(`🔗 ${corrCheck.reason}`);
         return;
       }
+
+// ── CROSS-MARKET INTELLIGENCE V1 ───────────────────────────────────────────
+// Checks hidden currency-theme concentration before confidence/risk sizing.
+const crossMarket = analyseCrossMarketIntelligence(
+  openTrades.map(t => ({
+    instrument: t.instrument,
+    direction: t.direction,
+  })),
+  {
+    instrument: pairStat.instrument,
+    direction: finalAction,
+  }
+);
+
+if (!crossMarket.approved) {
+  this.log(
+    `🌍 CROSS-MARKET BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    crossMarket.reason
+  );
+  return;
+}
+
+if (crossMarket.confidenceAdjustment !== 0) {
+  const beforeConfidence = finalConfidence;
+
+  finalConfidence = Math.max(
+    0,
+    Math.min(0.99, finalConfidence + crossMarket.confidenceAdjustment)
+  );
+
+  this.log(
+    `🌍 CROSS-MARKET ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${(beforeConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+    crossMarket.reason
+  );
+} else {
+  this.log(
+    `🌍 CROSS-MARKET OK: ${pairStat.instrument} ${finalAction} — ` +
+    crossMarket.reason
+  );
+}
+
+// ── AI PORTFOLIO MANAGER V1 ────────────────────────────────────────────────
+const portfolioManager = evaluatePortfolioCandidate(
+  {
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    regime: regime.regime,
+    strategy: stratSignal.strategy ?? "UNKNOWN",
+  },
+  openTrades.map(t => ({
+    instrument: t.instrument,
+    direction: t.direction,
+    confidence: 0.75,
+    metaScore: 0.5,
+  }))
+);
+
+if (!portfolioManager.approved) {
+  this.log(
+    `🧠 PORTFOLIO MANAGER BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioManager.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "PORTFOLIO",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: stratSignal.strategy ?? "UNKNOWN",
+    regime: regime.regime,
+    reason: `AI portfolio manager block: ${portfolioManager.reason}`,
+  });
+
+  return;
+}
+
+if (portfolioManager.adjustedConfidence !== finalConfidence) {
+  const beforeConfidence = finalConfidence;
+  finalConfidence = portfolioManager.adjustedConfidence;
+
+  this.log(
+    `🧠 PORTFOLIO MANAGER ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${(beforeConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+    portfolioManager.reason
+  );
+} else {
+  this.log(
+    `🧠 PORTFOLIO MANAGER OK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioManager.reason
+  );
+}
 
       // ── NEWS GUARD — block 30min before / 15min after high-impact events ────────
       const newsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
@@ -1251,12 +1393,69 @@ if (cutoff > 0) {
       finalConfidence = Math.min(Math.max(sessionAdj.adjustedConfidence, 0), 0.99);
       this.log(`${sessionAdj.sessionNote} [${pairStat.instrument}]`);
 
-      // ── Learned confidence threshold ──────────────────────────────────────────
-      const learnedThreshold = learningEngine.getPairConfidenceThreshold(pairStat.instrument);
-      if (finalConfidence < learnedThreshold) {
-        this.log(`🔍 ${pairStat.instrument} — ${(finalConfidence*100).toFixed(0)}% < learned threshold ${(learnedThreshold*100).toFixed(0)}% — SKIP`);
-        return;
-      }
+      // ── ADAPTIVE CONFIDENCE THRESHOLD V1 ───────────────────────────────────────
+const thresholdStrategy = stratSignal.strategy ?? "UNKNOWN";
+const thresholdRegime = regime.regime ?? "UNKNOWN";
+
+const thresholdPairLearning = learningEngine.getPairLearning(pairStat.instrument);
+const thresholdStrategyLearning = learningEngine.getStrategyLearning?.(thresholdStrategy);
+const thresholdRegimeLearning = learningEngine.getRegimeLearning?.(thresholdRegime);
+const thresholdConfidenceCalibration =
+  learningEngine.getConfidenceCalibration?.(finalConfidence);
+
+const learnedThreshold = learningEngine.getPairConfidenceThreshold(pairStat.instrument);
+
+const adaptiveThreshold = calculateAdaptiveConfidenceThreshold({
+  baseThreshold: learnedThreshold,
+  pairScore: thresholdPairLearning?.score,
+  strategyScore: thresholdStrategyLearning?.score,
+  regimeScore: thresholdRegimeLearning?.score,
+  confidenceCalibrationScore: thresholdConfidenceCalibration?.calibratedScore,
+  regimeConfidence: regime.regimeConfidence,
+  riskMood: regime.riskMood,
+});
+
+if (finalConfidence < adaptiveThreshold.threshold) {
+  this.log(
+    `🎚️ CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${(finalConfidence * 100).toFixed(0)}% < ` +
+    `${(adaptiveThreshold.threshold * 100).toFixed(0)}% | ` +
+    adaptiveThreshold.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "SIGNAL",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: thresholdStrategy,
+    regime: thresholdRegime,
+    reason:
+      `Confidence ${(finalConfidence * 100).toFixed(0)}% below adaptive threshold ` +
+      `${(adaptiveThreshold.threshold * 100).toFixed(0)}%: ${adaptiveThreshold.reason}`,
+    extra: {
+      learnedThreshold,
+      adaptiveThreshold: adaptiveThreshold.threshold,
+      adjustment: adaptiveThreshold.adjustment,
+      pairScore: thresholdPairLearning?.score,
+      strategyScore: thresholdStrategyLearning?.score,
+      regimeScore: thresholdRegimeLearning?.score,
+      confidenceCalibrationScore: thresholdConfidenceCalibration?.calibratedScore,
+      riskMood: regime.riskMood,
+      regimeConfidence: regime.regimeConfidence,
+    },
+  });
+
+  return;
+}
+
+this.log(
+  `🎚️ CONFIDENCE OK: ${pairStat.instrument} ${finalAction} — ` +
+  `${(finalConfidence * 100).toFixed(0)}% >= ` +
+  `${(adaptiveThreshold.threshold * 100).toFixed(0)}% | ` +
+  adaptiveThreshold.reason
+);
 
       if (finalAtr === 0) { this.log(`${pairStat.instrument} — zero ATR, skip`); return; }
 
@@ -1286,55 +1485,604 @@ if (cutoff > 0) {
         return;
       }
 
-      // ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
-      // Use fractional Kelly (25%) when we have enough trade history
-      // Kelly fraction = W - (1-W)/R  where W=win rate, R=avg win/avg loss
-      // Fractional Kelly = Kelly * 0.25 (conservative, avoids over-betting)
-      let effectiveRiskPct = cfg.riskPercent;
-      const recentTrades = this.state.tradeHistory.slice(-30);
-      if (recentTrades.length >= 15) {
-        const wins = recentTrades.filter(t => t.pnl > 0);
-        const losses = recentTrades.filter(t => t.pnl < 0);
-        if (wins.length >= 5 && losses.length >= 3) {
-          const winRate = wins.length / recentTrades.length;
-          const avgWin = wins.reduce((s, t) => s + t.pnl, 0) / wins.length;
-          const avgLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length);
-          const rr = avgLoss > 0 ? avgWin / avgLoss : 1;
-          const kelly = winRate - (1 - winRate) / rr;
-          const fractionalKelly = Math.max(0.005, Math.min(kelly * 0.25, 0.02)); // cap at 2%, floor at 0.5%
-          effectiveRiskPct = fractionalKelly * 100;
-          // Scale down further on losing streaks
-          const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
-          if (recentLosses >= 4) effectiveRiskPct *= 0.5; // 4/5 recent losses — halve size
-          else if (recentLosses >= 3) effectiveRiskPct *= 0.7; // 3/5 — reduce by 30%
-          this.log(`📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate*100).toFixed(0)}% RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`);
-        }
-      }
-      const units = calculateUnits(this.state.accountBalance, effectiveRiskPct, slDist, pairStat.instrument);
+// ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
+let effectiveRiskPct = cfg.riskPercent;
+if (portfolioManager.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+  effectiveRiskPct *= portfolioManager.riskMultiplier;
 
-      const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
-      pairStat.lastTrade = Date.now();
-      this.state.totalTrades++;
-      this.state.openTradesCount++;
-      this.tradesSinceWalkForward++;
-      this.openTradeSnapshots.set(tradeId, {
-        id: tradeId, instrument: pairStat.instrument, direction: finalAction,
-        units, entryPrice: entry, stopLoss: sl, takeProfit: tp,
-        openTime: Date.now(), unrealisedPnl: 0,
-      });
-      const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
-      this.log(`✅ ${finalAction} ${pairStat.instrument} [${regime.regime}] | ${units.toLocaleString()} units | SL ${sl.toFixed(dp)} TP ${tp.toFixed(dp)} | RR ${(reward/slDist).toFixed(1)} | ${finalReason}`);
-      // Telegram notification — fire and forget
-      notifyTradeOpen({
-        instrument: pairStat.instrument, direction: finalAction, units,
-        entryPrice: entry, stopLoss: sl, takeProfit: tp,
-        confidence: finalConfidence, reason: finalReason, regime: regime.regime,
-      }).catch(() => {});
-      this.openTradeSnapshots.set(tradeId, {
-        ...this.openTradeSnapshots.get(tradeId)!,
-        // @ts-ignore
-        _signal: { rsi: finalRsi, macd: finalMacd, bbPosition: finalBbPos, atr: finalAtr, ema9: finalEma9, ema21: finalEma21, regime: regime.regime },
-      });
+  this.log(
+    `🧠 PORTFOLIO MANAGER RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    portfolioManager.reason
+  );
+}
+const recentTrades = this.state.tradeHistory.slice(-30);
+
+if (recentTrades.length >= 15) {
+  const wins = recentTrades.filter(t => t.pnl > 0);
+  const losses = recentTrades.filter(t => t.pnl < 0);
+
+  if (wins.length >= 5 && losses.length >= 3) {
+    const winRate = wins.length / recentTrades.length;
+    const avgWin = wins.reduce((s, t) => s + t.pnl, 0) / wins.length;
+    const avgLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length);
+    const rr = avgLoss > 0 ? avgWin / avgLoss : 1;
+    const kelly = winRate - (1 - winRate) / rr;
+    const fractionalKelly = Math.max(0.005, Math.min(kelly * 0.25, 0.02));
+
+    effectiveRiskPct = fractionalKelly * 100;
+
+    const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
+    if (recentLosses >= 4) effectiveRiskPct *= 0.5;
+    else if (recentLosses >= 3) effectiveRiskPct *= 0.7;
+
+    this.log(
+      `📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate * 100).toFixed(0)}% ` +
+      `RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`
+    );
+  }
+}
+
+// ── META CONTEXT ───────────────────────────────────────────────────────────
+const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
+const metaRegime = regime.regime ?? "UNKNOWN";
+
+// ── STRATEGY GENOME V1 ────────────────────────────────────────────────────
+if (!strategyGenome.isEnabled(metaStrategy)) {
+  this.log(
+    `🧬 STRATEGY GENOME BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${metaStrategy} disabled`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Strategy genome disabled: ${metaStrategy}`,
+  });
+
+  return;
+}
+
+// ── MARKET MEMORY V1 ───────────────────────────────────────────────────────
+const memoryCheck = marketMemory.shouldBlock({
+  instrument: pairStat.instrument,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  confidence: finalConfidence,
+  rsi: finalRsi,
+});
+
+if (memoryCheck.blocked) {
+  this.log(
+    `🧠 MEMORY BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    memoryCheck.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Market memory block: ${memoryCheck.reason}`,
+    extra: memoryCheck.similar,
+  });
+
+  return;
+}
+
+this.log(
+  `🧠 MEMORY OK: ${pairStat.instrument} ${finalAction} — ` +
+  memoryCheck.reason
+);
+
+// ── STRATEGY-REGIME MATRIX V1 ─────────────────────────────────────────────
+const matrixCheck = strategyRegimeMatrix.shouldBlock(metaStrategy, metaRegime);
+
+if (matrixCheck.blocked) {
+  this.log(
+    `🧬 MATRIX BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    matrixCheck.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Strategy-regime matrix block: ${matrixCheck.reason}`,
+    extra: matrixCheck.cell,
+  });
+
+  return;
+}
+
+this.log(
+  `🧬 MATRIX OK: ${pairStat.instrument} ${finalAction} — ` +
+  matrixCheck.reason
+);
+
+// ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
+const metaApproval = evaluateMetaApproval({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  confidence: finalConfidence,
+  baseRiskPct: effectiveRiskPct,
+  pairLearning: learningEngine.getPairLearning(pairStat.instrument),
+  strategyLearning: learningEngine.getStrategyLearning?.(metaStrategy),
+  regimeLearning: learningEngine.getRegimeLearning?.(metaRegime),
+  confidenceCalibration: learningEngine.getConfidenceCalibration?.(finalConfidence),
+});
+
+if (!metaApproval.approved) {
+  this.log(
+    `🧠 META BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    metaApproval.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: metaApproval.reason,
+    extra: {
+      components: metaApproval.components,
+    },
+  });
+
+  return;
+}
+
+if (metaApproval.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * metaApproval.riskMultiplier
+  );
+
+  this.log(
+    `🧠 META RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    metaApproval.reason
+  );
+
+  await decisionJournal.record({
+    type: "RISK_REDUCED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: metaApproval.reason,
+    extra: {
+      beforeRiskPct: beforeRisk,
+      afterRiskPct: effectiveRiskPct,
+      riskMultiplier: metaApproval.riskMultiplier,
+      components: metaApproval.components,
+    },
+  });
+} else {
+  this.log(
+    `🧠 META OK: ${pairStat.instrument} ${finalAction} — ` +
+    metaApproval.reason
+  );
+}
+
+// ── REGIME RISK GOVERNOR V1 ────────────────────────────────────────────────
+const regimeRisk = evaluateRegimeRisk({
+  instrument: pairStat.instrument,
+  regime: regime.regime,
+  riskMood: regime.riskMood,
+  regimeConfidence: regime.regimeConfidence,
+  volatilityScore: regime.volatilityScore,
+  trendScore: regime.trendScore,
+  rangeScore: regime.rangeScore,
+  breakoutScore: regime.breakoutScore,
+  baseRiskPct: effectiveRiskPct,
+});
+
+if (!regimeRisk.approved) {
+  this.log(
+    `🧭 REGIME BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    regimeRisk.reason
+  );
+await decisionJournal.record({
+  type: "BLOCKED",
+  stage: "SIGNAL",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: `Regime block: ${regimeRisk.reason}`,
+  extra: {
+    riskMood: regime.riskMood,
+    regimeConfidence: regime.regimeConfidence,
+    volatilityScore: regime.volatilityScore,
+    trendScore: regime.trendScore,
+    rangeScore: regime.rangeScore,
+    breakoutScore: regime.breakoutScore,
+  },
+});
+  return;
+}
+
+if (regimeRisk.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * regimeRisk.riskMultiplier
+  );
+
+  this.log(
+    `🧭 REGIME RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    regimeRisk.reason
+  );
+
+await decisionJournal.record({
+  type: "RISK_REDUCED",
+  stage: "SIGNAL",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: `Regime risk reduction: ${regimeRisk.reason}`,
+  extra: {
+    riskMultiplier: regimeRisk.riskMultiplier,
+    riskMood: regime.riskMood,
+    regimeConfidence: regime.regimeConfidence,
+    volatilityScore: regime.volatilityScore,
+  },
+});
+
+} else {
+  this.log(
+    `🧭 REGIME RISK OK: ${pairStat.instrument} ${finalAction} — ` +
+    regimeRisk.reason
+  );
+}
+
+// ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
+const equityPeak = Math.max(
+  ...(this.state.equityCurve ?? []).map(e => e.equity),
+  this.state.accountBalance > 0 ? this.state.accountBalance : 0
+);
+
+const currentDrawdownPct =
+  equityPeak > 0
+    ? ((equityPeak - this.state.accountEquity) / equityPeak) * 100
+    : 0;
+
+const dynamicRisk = calculateDynamicRisk({
+  baseRiskPct: effectiveRiskPct,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  strategyScore: metaApproval.components.strategyScore,
+  pairScore: metaApproval.components.pairScore,
+  regimeScore: metaApproval.components.regimeScore,
+  currentDrawdownPct,
+});
+
+effectiveRiskPct = dynamicRisk.finalRiskPct;
+
+if (dynamicRisk.multiplier < 1) {
+  decisionJournal.record({
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    action: "RISK_REDUCED",
+    layer: "DYNAMIC_RISK",
+    reason: dynamicRisk.reason,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    riskMultiplier: dynamicRisk.multiplier,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    extra: {
+      currentDrawdownPct,
+      components: metaApproval.components,
+    },
+  });
+}
+
+this.log(
+  `🎯 DYNAMIC RISK: ${pairStat.instrument} ${finalAction} — ` +
+  `${effectiveRiskPct.toFixed(2)}% | ${dynamicRisk.reason}`
+);
+
+await decisionJournal.record({
+  type: dynamicRisk.multiplier < 1 ? "RISK_REDUCED" : "APPROVED",
+  stage: "DYNAMIC_RISK",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: dynamicRisk.reason,
+  extra: {
+    multiplier: dynamicRisk.multiplier,
+    currentDrawdownPct,
+  },
+});
+
+// ── SAFETY GOVERNOR V1 ─────────────────────────────────────────────────────
+const safetyRecentTrades = this.state.tradeHistory.slice(-20);
+
+let consecutiveLosses = 0;
+
+for (let i = safetyRecentTrades.length - 1; i >= 0; i--) {
+  if (safetyRecentTrades[i].won) break;
+  consecutiveLosses++;
+}
+
+const todayTrades = this.state.tradeHistory.filter(t =>
+  new Date(t.closedAt).toDateString() === new Date().toDateString()
+);
+
+const todayWins = todayTrades.filter(t => t.won).length;
+
+const todayWinRate =
+  todayTrades.length > 0 ? todayWins / todayTrades.length : 1;
+
+const safety = evaluateSafetyGovernor({
+  consecutiveLosses,
+  currentDrawdownPct,
+  todayWinRate,
+  tradesToday: todayTrades.length,
+  portfolioHeatPct: this.portfolioHeat,
+  regimeRisk: regime.volatilityScore,
+  metaScore: metaApproval.metaScore,
+  confidence: finalConfidence,
+});
+
+if (!safety.approved) {
+  this.log(
+    `🛡️ SAFETY GOVERNOR BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    safety.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "DYNAMIC_RISK",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Safety Governor block: ${safety.reason}`,
+    extra: {
+      dangerScore: safety.dangerScore,
+      consecutiveLosses,
+      todayWinRate,
+      tradesToday: todayTrades.length,
+      currentDrawdownPct,
+      portfolioHeatPct: this.portfolioHeat,
+    },
+  });
+
+  return;
+}
+
+if (safety.riskMultiplier < 1) {
+  const beforeSafetyRisk = effectiveRiskPct;
+  effectiveRiskPct = Math.max(0.25, effectiveRiskPct * safety.riskMultiplier);
+
+  this.log(
+    `🛡️ SAFETY RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeSafetyRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    safety.reason
+  );
+} else {
+  this.log(
+    `🛡️ SAFETY OK: ${pairStat.instrument} ${finalAction} — ` +
+    `danger ${safety.dangerScore} | ${safety.reason}`
+  );
+}
+
+const units = calculateUnits(
+  this.state.accountBalance,
+  effectiveRiskPct,
+  slDist,
+  pairStat.instrument
+);
+
+// ── PORTFOLIO INTELLIGENCE V1 ───────────────────────────────────────────────
+const portfolioCheck = analysePortfolioIntelligence(
+  openTrades.map(t => ({
+    instrument: t.instrument,
+    direction: t.direction,
+    units: t.units,
+    entryPrice: t.entryPrice,
+    stopLoss: t.stopLoss,
+  })),
+  {
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    units,
+    entryPrice: entry,
+    stopLoss: sl,
+  },
+  this.state.accountEquity,
+  {
+    maxPortfolioHeatPct: 4.0,
+    maxSingleCurrencyExposurePct: 250,
+    maxSameCurrencyDirectionalTrades: 2,
+  }
+);
+
+if (!portfolioCheck.approved) {
+  decisionJournal.record({
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    action: "BLOCKED",
+    layer: "PORTFOLIO",
+    reason: portfolioCheck.reason,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    portfolioHeatPct: portfolioCheck.currentHeatPct,
+    projectedHeatPct: portfolioCheck.projectedHeatPct,
+    extra: {
+      proposedRiskPct: portfolioCheck.proposedRiskPct,
+      currencyExposurePct: portfolioCheck.currencyExposurePct,
+      directionalCounts: portfolioCheck.directionalCounts,
+    },
+  });
+
+  this.log(
+    `🧠 PORTFOLIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    portfolioCheck.reason
+  );
+
+  return;
+}
+
+
+
+this.portfolioHeat = portfolioCheck.projectedHeatPct;
+
+this.log(`🧠 PORTFOLIO OK: ${pairStat.instrument} ${finalAction} — ${portfolioCheck.reason}`);
+
+decisionJournal.record({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  action: "APPROVED",
+  layer: "EXECUTION",
+  reason: "Trade approved by meta, dynamic risk and portfolio layers",
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  riskMultiplier: dynamicRisk.multiplier,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  portfolioHeatPct: portfolioCheck.currentHeatPct,
+  projectedHeatPct: portfolioCheck.projectedHeatPct,
+  extra: {
+    units,
+    entry,
+    sl,
+    tp,
+    rr: reward / slDist,
+    dynamicRisk,
+    metaComponents: metaApproval.components,
+  },
+});
+
+const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
+await decisionJournal.record({
+  type: "EXECUTED",
+  stage: "EXECUTION",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: finalReason,
+  extra: {
+    tradeId,
+    units,
+    entry,
+    stopLoss: sl,
+    takeProfit: tp,
+    portfolioHeat: portfolioCheck.projectedHeatPct,
+  },
+});
+
+pairStat.lastTrade = Date.now();
+this.state.totalTrades++;
+this.state.openTradesCount++;
+this.tradesSinceWalkForward++;
+
+this.openTradeSnapshots.set(tradeId, {
+  id: tradeId,
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  units,
+  entryPrice: entry,
+  stopLoss: sl,
+  takeProfit: tp,
+  openTime: Date.now(),
+  unrealisedPnl: 0,
+});
+
+const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
+
+this.log(
+  `✅ ${finalAction} ${pairStat.instrument} [${regime.regime}] | ` +
+  `${units.toLocaleString()} units | SL ${sl.toFixed(dp)} TP ${tp.toFixed(dp)} | ` +
+  `RR ${(reward / slDist).toFixed(1)} | ${finalReason}`
+);
+
+// Telegram notification — fire and forget
+notifyTradeOpen({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  units,
+  entryPrice: entry,
+  stopLoss: sl,
+  takeProfit: tp,
+  confidence: finalConfidence,
+  reason: finalReason,
+  regime: regime.regime,
+}).catch(() => {});
+
+this.openTradeSnapshots.set(tradeId, {
+  ...this.openTradeSnapshots.get(tradeId)!,
+  _signal: {
+    rsi: finalRsi,
+    macd: finalMacd,
+    bbPosition: finalBbPos,
+    atr: finalAtr,
+    ema9: finalEma9,
+    ema21: finalEma21,
+    regime: regime.regime,
+    regimeConfidence: regime.regimeConfidence,
+    riskMood: regime.riskMood,
+    trendScore: regime.trendScore,
+    rangeScore: regime.rangeScore,
+    breakoutScore: regime.breakoutScore,
+    volatilityScore: regime.volatilityScore,
+    strategy: stratSignal.strategy,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+  },
+});
 
       // ── Walk-forward optimiser: run every 30 trades ───────────────────────────
       if (this.tradesSinceWalkForward >= 30) {
@@ -1388,22 +2136,32 @@ if (cutoff > 0) {
         else if (snap?.takeProfit && direction === "SELL" && exitPrice <= snap.takeProfit + pipSize * 3) closeReason = "TP";
         else if (snap?.stopLoss && direction === "BUY" && exitPrice <= snap.stopLoss + pipSize * 3) closeReason = "SL";
         else if (snap?.stopLoss && direction === "SELL" && exitPrice >= snap.stopLoss - pipSize * 3) closeReason = "SL";
-        const closed: ClosedTrade = {
-          id: prevId, instrument, direction,
-          units: snap?.units ?? Math.abs(parseFloat(t.initialUnits ?? "0")),
-          entryPrice, exitPrice,
-          stopLoss: snap?.stopLoss ?? 0, takeProfit: snap?.takeProfit ?? 0,
-          openTime: snap?.openTime ?? new Date(t.openTime).getTime(),
-          closedAt: t.closeTime ? new Date(t.closeTime).getTime() : Date.now(),
-          pnl, pips: parseFloat(pips.toFixed(1)), won, closeReason,
-        };
+
+const snapSignal = (snap as any)?._signal ?? {};
+const closed: ClosedTrade = {
+  id: prevId,
+  instrument,
+  direction,
+  units: snap?.units ?? Math.abs(parseFloat(t.initialUnits ?? "0")),
+  entryPrice,
+  exitPrice,
+  stopLoss: snap?.stopLoss ?? 0,
+  takeProfit: snap?.takeProfit ?? 0,
+  openTime: snap?.openTime ?? new Date(t.openTime).getTime(),
+  closedAt: t.closeTime ? new Date(t.closeTime).getTime() : Date.now(),
+  pnl,
+  pips: parseFloat(pips.toFixed(1)),
+  won,
+  closeReason,
+  regime: snapSignal.regime ?? "UNKNOWN",
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+};
         this.state.tradeHistory.unshift(closed);
         if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.pop();
         if (won) this.state.totalWins++; else this.state.totalLosses++;
         this.state.totalPnl += pnl;
         const pair = this.state.pairs.find(p => p.instrument === instrument);
         if (pair) { if (won) pair.wins++; else pair.losses++; pair.totalPnl += pnl; }
-        this.updateWeights(instrument, won);
         this.log(`${won ? "🏆" : "💔"} ${direction} ${instrument} | ${won ? "+" : ""}${pnl.toFixed(2)} (${pips.toFixed(1)}p) | ${closeReason}`);
         // Telegram notification for trade close
         notifyTradeClose({
@@ -1414,40 +2172,67 @@ if (cutoff > 0) {
         }).catch(() => {});
             
         // Feed closed trade to learning engine
-        const snapSignal = (snap as any)?._signal ?? {};
-        learningEngine.recordTrade({
-          instrument,
-          direction,
-          won,
-          pnl,
-          pips: closed.pips,
-          rsi: snapSignal.rsi ?? 50,
-          macd: snapSignal.macd ?? 0,
-          bbPosition: snapSignal.bbPosition ?? 0.5,
-          atr: snapSignal.atr ?? 0,
-          entryPrice,
-          ema9: snapSignal.ema9 ?? entryPrice,
-          ema21: snapSignal.ema21 ?? entryPrice,
-          openTime: closed.openTime,
-          closedAt: closed.closedAt,
-        });
+learningEngine.recordTrade({
+  instrument,
+  direction,
+  won,
+  pnl,
+  pips: closed.pips,
+  rsi: snapSignal.rsi ?? 50,
+  macd: snapSignal.macd ?? 0,
+  bbPosition: snapSignal.bbPosition ?? 0.5,
+  atr: snapSignal.atr ?? 0,
+  entryPrice,
+  ema9: snapSignal.ema9 ?? entryPrice,
+  ema21: snapSignal.ema21 ?? entryPrice,
+  openTime: closed.openTime,
+  closedAt: closed.closedAt,
+  regime: snapSignal.regime ?? "UNKNOWN",
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+  confidence: snapSignal.confidence ?? 0,
+});
 
-                // === LEARNING EVOLUTION FIX — Reliable Trigger ===
-        if (this.state.totalTrades >= 30 && this.tradesSinceWalkForward >= 4) {
-          this.log(`🔬 Triggering Learning Engine evolution after ${this.state.totalTrades} trades...`);
-          
-          await learningEngine.evolve?.();   // Safe call
-          
-          const lp = learningEngine.getParams();
-          this.state.config.rsiLower = lp.rsiLower;
-          this.state.config.rsiUpper = lp.rsiUpper;
-          this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
-          this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
-          this.state.config.minConfidence = lp.minConfidence;
-          
-          this.tradesSinceWalkForward = 0;
-          this.log(`✅ Evolution complete → New params: RSI ${lp.rsiLower}-${lp.rsiUpper}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
-        }
+marketMemory.record({
+  time: closed.closedAt,
+  instrument,
+  direction,
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+  regime: snapSignal.regime ?? "UNKNOWN",
+  riskMood: snapSignal.riskMood ?? "UNKNOWN",
+  confidence: snapSignal.confidence ?? 0,
+  metaScore: snapSignal.metaScore,
+  rsi: snapSignal.rsi,
+  atr: snapSignal.atr,
+  won,
+  pnl,
+  pips: closed.pips,
+});
+
+strategyRegimeMatrix.record(
+  snapSignal.strategy ?? "UNKNOWN",
+  snapSignal.regime ?? "UNKNOWN",
+  won,
+  pnl
+);
+
+strategyGenome.recordTrade(
+  snapSignal.strategy ?? "UNKNOWN",
+  won,
+  pnl
+);
+
+  // === LEARNING EVOLUTION STATUS ===
+// Evolution is now handled inside learningEngine.recordTrade()
+// using reliable "trades since last evolution" logic.
+const evoStatus = learningEngine.getEvolutionStatus?.();
+
+if (evoStatus) {
+  this.log(
+    `🧬 Evolution status: v${evoStatus.currentVersion} | ` +
+    `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} trades since last evolution | ` +
+    `${evoStatus.tradesRemaining} remaining`
+  );
+}
 
         // Apply any evolved params back to config
         const lp = learningEngine.getParams();
@@ -1495,8 +2280,18 @@ if (cutoff > 0) {
 
         const minMove = isJpy ? 0.005 : 0.00003;
 
+const snapSignal = (snap as any)?._signal ?? {};
+
+const adaptiveExit = evaluateAdaptiveExit({
+  rMultiple: R,
+  riskMood: snapSignal.riskMood,
+  regime: snapSignal.regime,
+  confidence: snapSignal.confidence,
+  metaScore: snapSignal.metaScore,
+});
+
         // Stage 1: Breakeven at 1R
-        if (R >= 1.0 && !this.breakevenSet.has(trade.id)) {
+if (R >= adaptiveExit.moveToBreakevenAtR && !this.breakevenSet.has(trade.id)) {
           const buffer = slDist * 0.05;
           const beSl = trade.direction === "BUY"
             ? snap.entryPrice + buffer
@@ -1516,7 +2311,7 @@ if (cutoff > 0) {
         }
 
         // Stage 2: Partial TP at 1.5R (lock in profit)
-        if (!this.partialTpTaken.has(trade.id) && R >= 1.5 && trade.units >= 200) {
+if (!this.partialTpTaken.has(trade.id) && R >= adaptiveExit.partialTakeProfitAtR && trade.units >= 200) {
           const halfUnits = Math.floor(trade.units / 2);
           const closeUnits = trade.direction === "BUY" ? -halfUnits : halfUnits;
           try {
@@ -1539,9 +2334,11 @@ if (cutoff > 0) {
         }
 
         // Stage 3: Dynamic trailing at 2R+
-        if (!this.state.config.trailingStopEnabled || R < 2.0) continue;
+ if (!this.state.config.trailingStopEnabled || R < adaptiveExit.trailStartAtR) continue;
 
-        const trailMult = R >= 3.0 ? 1.0 : 1.5;
+const trailMult = R >= 3.0
+  ? Math.min(1.0, adaptiveExit.trailAtrMultiplier)
+  : adaptiveExit.trailAtrMultiplier;
         const newSl = trade.direction === "BUY"
           ? currentPrice - (currentAtr * trailMult)
           : currentPrice + (currentAtr * trailMult);
@@ -1564,7 +2361,7 @@ if (cutoff > 0) {
   }
 
 
-  resetStats() {
+    resetStats() {
     this.state.totalTrades = 0;
     this.state.totalWins = 0;
     this.state.totalLosses = 0;
@@ -1572,41 +2369,18 @@ if (cutoff > 0) {
     this.state.tradeHistory = [];
     this.state.equityCurve = [];
     this.state.logs = [];
+
     for (const pair of this.state.pairs) {
       pair.wins = 0;
       pair.losses = 0;
       pair.totalPnl = 0;
     }
-    Array.from(this.adaptiveWeights.keys()).forEach(key => {
-      this.adaptiveWeights.set(key, {
-        minConfidence: 0.78,
-        wins: 0, losses: 0, consecutiveLosses: 0,
-      });
-    });
-    this.log("\uD83D\uDD04 Stats reset \u2014 clean slate");
-  }
 
-  private updateWeights(instrument: string, won: boolean) {
-    const w = this.adaptiveWeights.get(instrument);
-    if (!w) return;
-    if (won) {
-      w.wins++;
-      w.consecutiveLosses = 0;
-      w.minConfidence = Math.max(0.72, w.minConfidence - 0.005);
-    } else {
-      w.losses++;
-      w.consecutiveLosses++;
-      w.minConfidence = Math.min(0.95, w.minConfidence + 0.02);
-      if (w.consecutiveLosses >= 3) {
-        w.minConfidence = Math.min(0.95, w.minConfidence + 0.03);
-        this.log(`⚠ ${instrument}: ${w.consecutiveLosses} losses — threshold → ${(w.minConfidence * 100).toFixed(0)}%`);
-      }
-    }
+    this.log("🔄 Stats reset — clean slate");
   }
 }
 
 export const autonomousEngine = new AutonomousEngine();
-
 export async function autoStartEngine() {
   const token = process.env.OANDA_API_TOKEN;
   const accountId = process.env.OANDA_ACCOUNT_ID;

@@ -1,0 +1,89 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { sql } from "drizzle-orm";
+import { getDb } from "./db";
+
+const DATA_DIR = path.join(process.cwd(), "data");
+
+export async function loadJsonFile<T>(fileName: string, fallback: T): Promise<T> {
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    const raw = await readFile(path.join(DATA_DIR, fileName), "utf8");
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveJsonFile(fileName: string, data: unknown): Promise<void> {
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    await writeFile(
+      path.join(DATA_DIR, fileName),
+      JSON.stringify(data, null, 2),
+      "utf8"
+    );
+  } catch (e) {
+    console.warn(`[PersistentMemory] Failed to save ${fileName}:`, e);
+  }
+}
+
+export async function loadPersistentState<T>(
+  key: string,
+  fallback: T
+): Promise<T> {
+  try {
+    const db = await getDb();
+
+    if (!db) {
+      return loadJsonFile(`${key}.json`, fallback);
+    }
+
+    const rows = await db.execute(sql`
+      SELECT \`value\`
+      FROM bot_learning_state
+      WHERE \`key\` = ${key}
+      LIMIT 1
+    `);
+
+    const data = rows as any;
+
+    const value =
+      Array.isArray(data) && data[0]?.value
+        ? data[0].value
+        : Array.isArray(data?.rows) && data.rows[0]?.value
+          ? data.rows[0].value
+          : null;
+
+    if (!value) return fallback;
+
+    return JSON.parse(value) as T;
+  } catch {
+    return loadJsonFile(`${key}.json`, fallback);
+  }
+}
+
+export async function savePersistentState(
+  key: string,
+  data: unknown
+): Promise<void> {
+  const json = JSON.stringify(data);
+
+  try {
+    const db = await getDb();
+
+    if (!db) {
+      await saveJsonFile(`${key}.json`, data);
+      return;
+    }
+
+    await db.execute(sql`
+      INSERT INTO bot_learning_state (\`key\`, \`value\`, updated_at)
+      VALUES (${key}, ${json}, NOW())
+      ON DUPLICATE KEY UPDATE \`value\` = ${json}, updated_at = NOW()
+    `);
+  } catch (e) {
+    console.warn(`[PersistentMemory] DB save failed for ${key}:`, e);
+    await saveJsonFile(`${key}.json`, data);
+  }
+}

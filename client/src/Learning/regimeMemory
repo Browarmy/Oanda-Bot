@@ -1,0 +1,57 @@
+export type RegimeType =
+  | "TRENDING"
+  | "RANGING"
+  | "VOLATILE"
+  | "BREAKOUT";
+
+export interface RegimeStats {
+  wins: number;
+  losses: number;
+  pnl: number;
+}
+
+export interface RegimeMemory {
+  TRENDING: RegimeStats;
+  RANGING: RegimeStats;
+  VOLATILE: RegimeStats;
+  BREAKOUT: RegimeStats;
+}
+
+export const createRegimeMemory = (): RegimeMemory => ({
+  TRENDING: {
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+  },
+  RANGING: {
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+  },
+  VOLATILE: {
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+  },
+  BREAKOUT: {
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+  },
+});
+
+export function updateRegimeMemory(
+  memory: RegimeMemory,
+  regime: RegimeType,
+  pnl: number
+) {
+  const r = memory[regime];
+
+  if (pnl > 0) {
+    r.wins++;
+  } else {
+    r.losses++;
+  }
+
+  r.pnl += pnl;
+}
