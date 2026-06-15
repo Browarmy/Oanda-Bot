@@ -2067,6 +2067,7 @@ metaScore: metaApproval.metaScore,
         else if (snap?.stopLoss && direction === "BUY" && exitPrice <= snap.stopLoss + pipSize * 3) closeReason = "SL";
         else if (snap?.stopLoss && direction === "SELL" && exitPrice >= snap.stopLoss - pipSize * 3) closeReason = "SL";
 
+const snapSignal = (snap as any)?._signal ?? {};
 const closed: ClosedTrade = {
   id: prevId,
   instrument,
@@ -2102,7 +2103,6 @@ const closed: ClosedTrade = {
         }).catch(() => {});
             
         // Feed closed trade to learning engine
-        const snapSignal = (snap as any)?._signal ?? {};
 learningEngine.recordTrade({
   instrument,
   direction,
