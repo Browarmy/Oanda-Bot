@@ -1921,33 +1921,39 @@ this.log(
 );
 
 // Telegram notification — fire and forget
-      notifyTradeOpen({
-        instrument: pairStat.instrument, direction: finalAction, units,
-        entryPrice: entry, stopLoss: sl, takeProfit: tp,
-        confidence: finalConfidence, reason: finalReason, regime: regime.regime,
-      }).catch(() => {});
-      this.openTradeSnapshots.set(tradeId, {
-        ...this.openTradeSnapshots.get(tradeId)!,
-        // @ts-ignore
-_signal: {
-  rsi: finalRsi,
-  macd: finalMacd,
-  bbPosition: finalBbPos,
-  atr: finalAtr,
-  ema9: finalEma9,
-  ema21: finalEma21,
+notifyTradeOpen({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  units,
+  entryPrice: entry,
+  stopLoss: sl,
+  takeProfit: tp,
+  confidence: finalConfidence,
+  reason: finalReason,
   regime: regime.regime,
-regimeConfidence: regime.regimeConfidence,
-riskMood: regime.riskMood,
-trendScore: regime.trendScore,
-rangeScore: regime.rangeScore,
-breakoutScore: regime.breakoutScore,
-volatilityScore: regime.volatilityScore,
-strategy: stratSignal.strategy,
-confidence: finalConfidence,
-metaScore: metaApproval.metaScore,
-},
-      });
+}).catch(() => {});
+
+this.openTradeSnapshots.set(tradeId, {
+  ...this.openTradeSnapshots.get(tradeId)!,
+  _signal: {
+    rsi: finalRsi,
+    macd: finalMacd,
+    bbPosition: finalBbPos,
+    atr: finalAtr,
+    ema9: finalEma9,
+    ema21: finalEma21,
+    regime: regime.regime,
+    regimeConfidence: regime.regimeConfidence,
+    riskMood: regime.riskMood,
+    trendScore: regime.trendScore,
+    rangeScore: regime.rangeScore,
+    breakoutScore: regime.breakoutScore,
+    volatilityScore: regime.volatilityScore,
+    strategy: stratSignal.strategy,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+  },
+});
 
       // ── Walk-forward optimiser: run every 30 trades ───────────────────────────
       if (this.tradesSinceWalkForward >= 30) {
