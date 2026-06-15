@@ -1516,6 +1516,31 @@ if (recentTrades.length >= 15) {
   }
 }
 
+// ── META CONTEXT ───────────────────────────────────────────────────────────
+const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
+const metaRegime = regime.regime ?? "UNKNOWN";
+
+// ── STRATEGY GENOME V1 ────────────────────────────────────────────────────
+if (!strategyGenome.isEnabled(metaStrategy)) {
+  this.log(
+    `🧬 STRATEGY GENOME BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${metaStrategy} disabled`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "META",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Strategy genome disabled: ${metaStrategy}`,
+  });
+
+  return;
+}
+
 // ── MARKET MEMORY V1 ───────────────────────────────────────────────────────
 const memoryCheck = marketMemory.shouldBlock({
   instrument: pairStat.instrument,
@@ -1581,20 +1606,6 @@ this.log(
 );
 
 // ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
-const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
-if (
-  !strategyGenome.isEnabled(
-    metaStrategy
-  )
-) {
-  this.log(
-    `🧬 STRATEGY GENOME BLOCK: ${metaStrategy}`
-  );
-
-  return;
-}
-const metaRegime = regime.regime ?? "UNKNOWN";
-
 const metaApproval = evaluateMetaApproval({
   instrument: pairStat.instrument,
   direction: finalAction,
