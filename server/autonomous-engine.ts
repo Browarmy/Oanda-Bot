@@ -131,12 +131,6 @@ interface PairStats {
   enabled: boolean;
 }
 
-interface AdaptiveWeights {
-  minConfidence: number;
-  wins: number;
-  losses: number;
-  consecutiveLosses: number;
-}
 
 export type MarketSession = "ALL" | "LONDON" | "NEW_YORK" | "TOKYO" | "SYDNEY" | "LONDON_NY";
 
@@ -608,7 +602,6 @@ export class AutonomousEngine extends EventEmitter {
   private breakevenSet: Set<string> = new Set();
   private state: EngineState;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
-  private adaptiveWeights: Map<string, AdaptiveWeights> = new Map();
   private scanning = false;
   private previousOpenTradeIds: Set<string> = new Set();
   private openTradeSnapshots: Map<string, OpenTrade> = new Map();
@@ -657,12 +650,6 @@ export class AutonomousEngine extends EventEmitter {
       tradeHistory: [],
     };
 
-    for (const pair of ALL_PAIRS) {
-      this.adaptiveWeights.set(pair, {
-        minConfidence: 0.78,
-        wins: 0, losses: 0, consecutiveLosses: 0,
-      });
-    }
 
     // Initialize Sets for trailing stop management (required for esbuild compatibility)
     this.partialTpTaken = new Set<string>();
@@ -2040,7 +2027,6 @@ const closed: ClosedTrade = {
         this.state.totalPnl += pnl;
         const pair = this.state.pairs.find(p => p.instrument === instrument);
         if (pair) { if (won) pair.wins++; else pair.losses++; pair.totalPnl += pnl; }
-        this.updateWeights(instrument, won);
         this.log(`${won ? "🏆" : "💔"} ${direction} ${instrument} | ${won ? "+" : ""}${pnl.toFixed(2)} (${pips.toFixed(1)}p) | ${closeReason}`);
         // Telegram notification for trade close
         notifyTradeClose({
@@ -2253,33 +2239,9 @@ const trailMult = R >= 3.0
       pair.losses = 0;
       pair.totalPnl = 0;
     }
-    Array.from(this.adaptiveWeights.keys()).forEach(key => {
-      this.adaptiveWeights.set(key, {
-        minConfidence: 0.78,
-        wins: 0, losses: 0, consecutiveLosses: 0,
-      });
-    });
-    this.log("\uD83D\uDD04 Stats reset \u2014 clean slate");
-  }
 
-  private updateWeights(instrument: string, won: boolean) {
-    const w = this.adaptiveWeights.get(instrument);
-    if (!w) return;
-    if (won) {
-      w.wins++;
-      w.consecutiveLosses = 0;
-      w.minConfidence = Math.max(0.72, w.minConfidence - 0.005);
-    } else {
-      w.losses++;
-      w.consecutiveLosses++;
-      w.minConfidence = Math.min(0.95, w.minConfidence + 0.02);
-      if (w.consecutiveLosses >= 3) {
-        w.minConfidence = Math.min(0.95, w.minConfidence + 0.03);
-        this.log(`⚠ ${instrument}: ${w.consecutiveLosses} losses — threshold → ${(w.minConfidence * 100).toFixed(0)}%`);
-      }
-    }
-  }
-}
+
+
 
 export const autonomousEngine = new AutonomousEngine();
 
