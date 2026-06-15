@@ -1886,28 +1886,7 @@ if (!portfolioCheck.approved) {
   return;
 }
 
-  await decisionJournal.record({
-    type: "BLOCKED",
-    stage: "PORTFOLIO",
-    instrument: pairStat.instrument,
-    direction: finalAction,
-    confidence: finalConfidence,
-    metaScore: metaApproval.metaScore,
-    riskPct: effectiveRiskPct,
-    strategy: metaStrategy,
-    regime: metaRegime,
-    reason: portfolioCheck.reason,
-    extra: {
-      currentHeatPct: portfolioCheck.currentHeatPct,
-      projectedHeatPct: portfolioCheck.projectedHeatPct,
-      proposedRiskPct: portfolioCheck.proposedRiskPct,
-      currencyExposurePct: portfolioCheck.currencyExposurePct,
-      directionalCounts: portfolioCheck.directionalCounts,
-    },
-  });
 
-  return;
-}
 
 this.portfolioHeat = portfolioCheck.projectedHeatPct;
 
