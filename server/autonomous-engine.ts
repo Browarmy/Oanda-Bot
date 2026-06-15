@@ -51,6 +51,7 @@ import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { evaluateAdaptiveExit } from "./adaptive-exit";
 import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
+import { evaluateSafetyGovernor } from "./safety-governor";
 import {
   newsGuard,
   checkFvgRetest,
@@ -103,15 +104,61 @@ export interface ClosedTrade {
 }
 
 export interface OpenTrade {
+
   id: string;
+
   instrument: string;
+
   direction: "BUY" | "SELL";
+
   units: number;
+
   entryPrice: number;
+
   stopLoss: number;
+
   takeProfit: number;
+
   openTime: number;
+
   unrealisedPnl: number;
+
+  _signal?: {
+
+    rsi?: number;
+
+    macd?: number;
+
+    bbPosition?: number;
+
+    atr?: number;
+
+    ema9?: number;
+
+    ema21?: number;
+
+    regime?: string;
+
+    regimeConfidence?: number;
+
+    riskMood?: string;
+
+    trendScore?: number;
+
+    rangeScore?: number;
+
+    breakoutScore?: number;
+
+    volatilityScore?: number;
+
+    strategy?: string;
+
+    confidence?: number;
+
+    metaScore?: number;
+
+  };
+
 }
 
 interface PairStats {
@@ -739,11 +786,16 @@ await strategyRegimeMatrix.load();
       ? (this.state.totalPnl / this.state.totalTrades).toFixed(2) 
       : "0";
 
-    this.log(`📊 DAILY SUMMARY | Trades: ${this.state.totalTrades} | Win Rate: ${winRate}% | Total P&L: ${this.state.totalPnl.toFixed(2)} | Expectancy: ${expectancy} | Equity: ${this.state.accountEquity.toFixed(2)}`);
+this.log(
+  `📊 DAILY SUMMARY | Trades: ${this.state.totalTrades} | Win Rate: ${winRate}% | Total P&L: ${this.state.totalPnl.toFixed(2)} | Expectancy: ${expectancy} | Equity: ${this.state.accountEquity.toFixed(2)}`
+);
 
+// Start scanning
+this.scanTimer = setInterval(() => this.scanAllPairs(), SCAN_INTERVAL_MS);
+this.scanAllPairs();
+}
 
-
-  stop() {
+stop() {
     if (this.scanTimer) { 
       clearInterval(this.scanTimer); 
       this.scanTimer = null; 
@@ -1782,6 +1834,83 @@ await decisionJournal.record({
     currentDrawdownPct,
   },
 });
+
+// ── SAFETY GOVERNOR V1 ─────────────────────────────────────────────────────
+const safetyRecentTrades = this.state.tradeHistory.slice(-20);
+
+let consecutiveLosses = 0;
+
+for (let i = safetyRecentTrades.length - 1; i >= 0; i--) {
+  if (safetyRecentTrades[i].won) break;
+  consecutiveLosses++;
+}
+
+const todayTrades = this.state.tradeHistory.filter(t =>
+  new Date(t.closedAt).toDateString() === new Date().toDateString()
+);
+
+const todayWins = todayTrades.filter(t => t.won).length;
+
+const todayWinRate =
+  todayTrades.length > 0 ? todayWins / todayTrades.length : 1;
+
+const safety = evaluateSafetyGovernor({
+  consecutiveLosses,
+  currentDrawdownPct,
+  todayWinRate,
+  tradesToday: todayTrades.length,
+  portfolioHeatPct: this.portfolioHeat,
+  regimeRisk: regime.volatilityScore,
+  metaScore: metaApproval.metaScore,
+  confidence: finalConfidence,
+});
+
+if (!safety.approved) {
+  this.log(
+    `🛡️ SAFETY GOVERNOR BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    safety.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "DYNAMIC_RISK",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Safety Governor block: ${safety.reason}`,
+    extra: {
+      dangerScore: safety.dangerScore,
+      consecutiveLosses,
+      todayWinRate,
+      tradesToday: todayTrades.length,
+      currentDrawdownPct,
+      portfolioHeatPct: this.portfolioHeat,
+    },
+  });
+
+  return;
+}
+
+if (safety.riskMultiplier < 1) {
+  const beforeSafetyRisk = effectiveRiskPct;
+  effectiveRiskPct = Math.max(0.25, effectiveRiskPct * safety.riskMultiplier);
+
+  this.log(
+    `🛡️ SAFETY RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeSafetyRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    safety.reason
+  );
+} else {
+  this.log(
+    `🛡️ SAFETY OK: ${pairStat.instrument} ${finalAction} — ` +
+    `danger ${safety.dangerScore} | ${safety.reason}`
+  );
+}
+
 const units = calculateUnits(
   this.state.accountBalance,
   effectiveRiskPct,
@@ -2232,7 +2361,7 @@ const trailMult = R >= 3.0
   }
 
 
-  resetStats() {
+    resetStats() {
     this.state.totalTrades = 0;
     this.state.totalWins = 0;
     this.state.totalLosses = 0;
@@ -2240,17 +2369,18 @@ const trailMult = R >= 3.0
     this.state.tradeHistory = [];
     this.state.equityCurve = [];
     this.state.logs = [];
+
     for (const pair of this.state.pairs) {
       pair.wins = 0;
       pair.losses = 0;
       pair.totalPnl = 0;
     }
 
-
-
+    this.log("🔄 Stats reset — clean slate");
+  }
+}
 
 export const autonomousEngine = new AutonomousEngine();
-
 export async function autoStartEngine() {
   const token = process.env.OANDA_API_TOKEN;
   const accountId = process.env.OANDA_ACCOUNT_ID;
