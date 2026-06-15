@@ -20,9 +20,11 @@
  * - Scan only top 15 FX pairs (not 40 instruments)
  */
 import { EventEmitter } from "events";
-import { ENV } from "./_core/env";
 import { learningEngine } from "./learning-engine";
-import { notifyTradeOpen, notifyTradeClose, notifyDailyLossGuard, notifyBotStatus, notifyPropFirmAlert } from "./telegram-notifier";
+import {
+  notifyTradeOpen,
+  notifyTradeClose,
+} from "./telegram-notifier";
 import {
   detectRegime,
   selectStrategy,
@@ -43,14 +45,10 @@ import { calculateDynamicRisk } from "./dynamic-risk";
 import { analyseCrossMarketIntelligence } from "./cross-market-intelligence";
 import { decisionJournal } from "./decision-journal";
 import { evaluateRegimeRisk } from "./regime-risk-governor";
-import { strategyGenome }
-from "./strategy-genome";
+import { strategyGenome } from "./strategy-genome";
 import { marketMemory } from "./market-memory";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { evaluateAdaptiveExit } from "./adaptive-exit";
-import { marketMemory } from "./market-memory";
-import { strategyGenome } from "./strategy-genome";
-import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import {
@@ -605,7 +603,9 @@ function calculateUnits(
 
 // ─── Main Engine ──────────────────────────────────────────────────────────────
 export class AutonomousEngine extends EventEmitter {
-    public api: any | null = null;   // Original
+  public api: OandaAPI | null = null;
+  private partialTpTaken: Set<string> = new Set();
+  private breakevenSet: Set<string> = new Set();
   private state: EngineState;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private adaptiveWeights: Map<string, AdaptiveWeights> = new Map();
