@@ -321,18 +321,19 @@ export class LearningEngine {
   private readonly MAX_PATTERNS = 500;
 
   constructor() {
-this.state = {
-  pairs: {},
-  sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
-  strategies: {},
-  confidenceBuckets: {},
-  regimes: {},
-  params: { ...DEFAULT_PARAMS },
-  patterns: [],
-  totalEvolutions: 0,
-  lastEvolution: Date.now(),
-  insights: [],
-};
+    this.state = {
+      pairs: {},
+      sessions: Array.from({ length: 24 }, (_, h) => defaultSessionLearning(h)),
+      strategies: {},
+      confidenceBuckets: {},
+      regimes: {},
+      params: { ...DEFAULT_PARAMS },
+      patterns: [],
+      totalEvolutions: 0,
+      lastEvolution: Date.now(),
+      insights: [],
+    };
+  }
 
   // ── Persistence ──────────────────────────────────────────────────────────────
 
