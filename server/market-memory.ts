@@ -20,32 +20,20 @@ class MarketMemory {
   private memories: MarketMemoryEntry[] = [];
   private readonly maxMemories = 2000;
 
-getSummary() {
-  const total = this.memories.length;
-  const wins = this.memories.filter(m => m.won).length;
-  const losses = this.memories.filter(m => !m.won).length;
-  const pnl = this.memories.reduce((sum, m) => sum + m.pnl, 0);
+  async load() {
+    const loaded = await loadPersistentState<MarketMemoryEntry[]>(
+      "marketMemory",
+      []
+    );
 
-  return {
-    total,
-    wins,
-    losses,
-    winRate: total > 0 ? wins / total : 0,
-    pnl,
-    recent: this.getRecent(25),
-  };
-}
-
-async save() {
-  await savePersistentState(
-    "marketMemory",
-    this.memories.slice(-this.maxMemories)
-  );
-}
+    this.memories = Array.isArray(loaded)
+      ? loaded.slice(-this.maxMemories)
+      : [];
+  }
 
   async save() {
-    await saveJsonFile(
-      "market-memory.json",
+    await savePersistentState(
+      "marketMemory",
       this.memories.slice(-this.maxMemories)
     );
   }
@@ -53,7 +41,6 @@ async save() {
   record(entry: MarketMemoryEntry) {
     this.memories.push(entry);
     this.memories = this.memories.slice(-this.maxMemories);
-
     this.save().catch(() => {});
   }
 
@@ -64,7 +51,7 @@ async save() {
     confidence: number;
     rsi?: number;
   }) {
-    const similar = this.memories.filter(m => {
+    const similar = this.memories.filter((m) => {
       let score = 0;
 
       if (m.instrument === input.instrument) score += 30;
@@ -83,8 +70,8 @@ async save() {
       return score >= 60;
     });
 
-    const wins = similar.filter(m => m.won);
-    const losses = similar.filter(m => !m.won);
+    const wins = similar.filter((m) => m.won);
+    const losses = similar.filter((m) => !m.won);
     const pnl = similar.reduce((sum, m) => sum + m.pnl, 0);
 
     return {
@@ -149,6 +136,22 @@ async save() {
 
   getAll() {
     return [...this.memories];
+  }
+
+  getSummary() {
+    const total = this.memories.length;
+    const wins = this.memories.filter((m) => m.won).length;
+    const losses = this.memories.filter((m) => !m.won).length;
+    const pnl = this.memories.reduce((sum, m) => sum + m.pnl, 0);
+
+    return {
+      total,
+      wins,
+      losses,
+      winRate: total > 0 ? wins / total : 0,
+      pnl,
+      recent: this.getRecent(25),
+    };
   }
 }
 
