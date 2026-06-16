@@ -497,222 +497,119 @@ const dailyProfitFactor =
           </>
         )}
 
-                                {/* ── DAILY STATS + POSITIONS ── */}
-        {tab === "positions" && (
-          <div className="space-y-6">
+  {/* ── DAILY STATS + POSITIONS ── */}
+{tab === "positions" && (
+  <div className="space-y-6">
+    <div className="p-5 rounded-2xl" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl font-semibold flex items-center gap-2" style={{ color: C.amber }}>
+          📊 Daily / Overall Stats
+        </h3>
+        <span className="text-xs" style={{ color: C.muted }}>
+          {new Date().toLocaleDateString()}
+        </span>
+      </div>
 
-            {/* ==================== DAILY / OVERALL STATS ==================== */}
-            <div className="p-5 rounded-2xl" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold flex items-center gap-2" style={{ color: C.amber }}>
-                  📊 Daily / Overall Stats
-                </h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatPill label="Total Trades" value={String(totalTrades)} />
+        <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
+        <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}£${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} />
+        <StatPill label="Expectancy" value={expectancy !== 0 ? `£${expectancy.toFixed(2)}` : "—"} color={expectancy >= 0 ? C.green : C.red} />
+      </div>
+    </div>
+
+    <div className="space-y-3">
+      {openTrades.length === 0 ? (
+        <div
+          className="rounded-3xl p-10 flex flex-col items-center gap-3"
+          style={{ background: C.s1, border: `1px solid ${C.border}` }}
+        >
+          <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
+          <p className="text-sm font-bold" style={{ color: C.muted }}>No open positions</p>
+          <p className="text-xs text-center" style={{ color: C.muted }}>
+            The bot is scanning for opportunities...
+          </p>
+        </div>
+      ) : (
+        openTrades.map((trade: any) => {
+          const lp = (livePrices as any)?.[trade.instrument];
+          const currentPrice = lp?.mid ?? trade.entryPrice;
+          const isJpy = trade.instrument.includes("JPY");
+          const pipFactor = isJpy ? 100 : 10000;
+          const rawDiff =
+            trade.direction === "BUY"
+              ? currentPrice - trade.entryPrice
+              : trade.entryPrice - currentPrice;
+          const livePips = rawDiff * pipFactor;
+          const isProfit = livePips >= 0;
+          const dp = isJpy ? 3 : 5;
+
+          return (
+            <div
+              key={trade.id}
+              className="rounded-3xl p-4"
+              style={{
+                background: C.s1,
+                border: `2px solid ${isProfit ? C.green + "44" : C.red + "44"}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-black px-3 py-1 rounded-full"
+                    style={{
+                      background: trade.direction === "BUY" ? "#00e67615" : "#ff444415",
+                      color: trade.direction === "BUY" ? C.green : C.red,
+                      border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}44`,
+                    }}
+                  >
+                    {trade.direction}
+                  </span>
+                  <span className="text-base font-black">
+                    {trade.instrument.replace("_", "/")}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (!closingTrades.has(trade.id)) {
+                      closeTradeMutation.mutate({ tradeId: trade.id });
+                    }
+                  }}
+                  disabled={closingTrades.has(trade.id)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-90 transition-all disabled:opacity-60"
+                  style={{
+                    background: "#ff444420",
+                    color: C.red,
+                    border: `1px solid ${C.red}44`,
+                  }}
+                >
+                  {closingTrades.has(trade.id) ? "..." : "Close"}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                <StatPill label="Entry" value={trade.entryPrice.toFixed(dp)} />
+                <StatPill label="Now" value={currentPrice.toFixed(dp)} color={isProfit ? C.green : C.red} />
+                <StatPill label="SL" value={trade.stopLoss.toFixed(dp)} color={C.red} />
+                <StatPill label="TP" value={trade.takeProfit.toFixed(dp)} color={C.green} />
+              </div>
+
+              <div className="flex justify-between items-center mt-3">
                 <span className="text-xs" style={{ color: C.muted }}>
-                  {new Date().toLocaleDateString()}
+                  {trade.units.toLocaleString()} units
+                </span>
+                <span className="text-sm font-black font-mono" style={{ color: isProfit ? C.green : C.red }}>
+                  {isProfit ? "+" : ""}{livePips.toFixed(1)}p
                 </span>
               </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total Trades</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>36</p>
-                </div>
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Win Rate</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>52.8%</p>
-                </div>
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Total P&L</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.green }}>+£611.38</p>
-                </div>
-                <div className="p-4 rounded-xl" style={{ background: C.s2 }}>
-                  <p className="text-xs font-bold tracking-widest uppercase" style={{ color: C.muted }}>Expectancy</p>
-                  <p className="text-3xl font-black mt-1" style={{ color: C.text }}>£16.98</p>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-border flex justify-between text-sm" style={{ color: C.muted }}>
-                <div>Profit Factor: <span style={{ color: C.amber }}>1.12</span></div>
-                <div>Max DD: <span style={{ color: C.green }}>0.00%</span></div>
-              </div>
             </div>
-
-  {/* ── OPEN POSITIONS ── */}
-<div className="space-y-3">
-  {openTrades.length === 0 ? (
-    <div
-      className="rounded-3xl p-10 flex flex-col items-center gap-3"
-      style={{ background: C.s1, border: `1px solid ${C.border}` }}
-    >
-      <TrendingUp className="w-10 h-10" style={{ color: C.muted }} />
-      <p className="text-sm font-bold" style={{ color: C.muted }}>
-        No open positions
-      </p>
-      <p className="text-xs text-center" style={{ color: C.muted }}>
-        The bot is scanning for opportunities...
-      </p>
+          );
+        })
+      )}
     </div>
-  ) : (
-    openTrades.map((trade: any) => {
-      const lp = (livePrices as any)?.[trade.instrument];
-      const currentPrice = lp?.mid ?? trade.entryPrice;
-      const isJpy = trade.instrument.includes("JPY");
-      const pipFactor = isJpy ? 100 : 10000;
-      const rawDiff =
-        trade.direction === "BUY"
-          ? currentPrice - trade.entryPrice
-          : trade.entryPrice - currentPrice;
-      const livePips = rawDiff * pipFactor;
-      const isProfit = livePips >= 0;
-      const tpDist = Math.abs(trade.takeProfit - trade.entryPrice);
-      const progress =
-        tpDist > 0 ? Math.max(0, Math.min(100, (rawDiff / tpDist) * 100)) : 0;
-      const dp = isJpy ? 3 : 5;
-      const durationMs = Date.now() - trade.openTime;
-      const durationMin = Math.floor(durationMs / 60000);
-      const durationStr =
-        durationMin < 60
-          ? `${durationMin}m`
-          : `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`;
-
-      return (
-        <div
-          key={trade.id}
-          className="rounded-3xl p-4"
-          style={{
-            background: C.s1,
-            border: `2px solid ${isProfit ? C.green + "44" : C.red + "44"}`,
-          }}
-        >
-          {/* Header row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span
-                className="text-xs font-black px-3 py-1 rounded-full"
-                style={{
-                  background:
-                    trade.direction === "BUY" ? "#00e67615" : "#ff444415",
-                  color: trade.direction === "BUY" ? C.green : C.red,
-                  border: `1px solid ${
-                    trade.direction === "BUY" ? C.green : C.red
-                  }44`,
-                }}
-              >
-                {trade.direction}
-              </span>
-              <span className="text-base font-black">
-                {trade.instrument.replace("_", "/")}
-              </span>
-              <span className="text-xs" style={{ color: C.muted }}>
-                {durationStr}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span
-                className="text-lg font-black font-mono"
-                style={{ color: isProfit ? C.green : C.red }}
-              >
-                {isProfit ? "+" : ""}
-                {livePips.toFixed(1)}p
-              </span>
-
-              <button
-                onClick={() => {
-                  if (!closingTrades.has(trade.id)) {
-                    closeTradeMutation.mutate({ tradeId: trade.id });
-                  }
-                }}
-                disabled={closingTrades.has(trade.id)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-90 transition-all disabled:opacity-60"
-                style={{
-                  background: closingTrades.has(trade.id)
-                    ? "#ff444440"
-                    : "#ff444420",
-                  color: C.red,
-                  border: `1px solid ${C.red}44`,
-                  minWidth: 56,
-                }}
-              >
-                {closingTrades.has(trade.id) ? "..." : "Close"}
-              </button>
-            </div>
-          </div>
-
-          {/* Price grid */}
-          <div className="grid grid-cols-4 gap-2 mb-3">
-            {[
-              { k: "Entry", v: trade.entryPrice.toFixed(dp) },
-              {
-                k: "Now",
-                v: currentPrice.toFixed(dp),
-                col: isProfit ? C.green : C.red,
-              },
-              { k: "SL", v: trade.stopLoss.toFixed(dp), col: C.red },
-              { k: "TP", v: trade.takeProfit.toFixed(dp), col: C.green },
-            ].map(({ k, v, col }) => (
-              <div
-                key={k}
-                className="rounded-xl p-2 text-center"
-                style={{ background: C.s2 }}
-              >
-                <p className="text-xs mb-0.5" style={{ color: C.muted }}>
-                  {k}
-                </p>
-                <p
-                  className="text-xs font-black font-mono"
-                  style={{ color: col ?? C.text }}
-                >
-                  {v}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {/* Progress bar */}
-          <div className="mb-2">
-            <div className="flex justify-between mb-1">
-              <span className="text-xs" style={{ color: C.muted }}>
-                Progress to TP
-              </span>
-              <span
-                className="text-xs font-bold"
-                style={{ color: isProfit ? C.green : C.muted }}
-              >
-                {progress.toFixed(0)}%
-              </span>
-            </div>
-            <div
-              className="h-1.5 rounded-full overflow-hidden"
-              style={{ background: C.s2 }}
-            >
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.max(0, progress)}%`,
-                  background: isProfit ? C.green : C.red,
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center">
-            <span className="text-xs" style={{ color: C.muted }}>
-              {trade.units.toLocaleString()} units
-            </span>
-            <span
-              className="text-sm font-black font-mono"
-              style={{ color: isProfit ? C.green : C.red }}
-            >
-              {isProfit ? "+" : ""}
-              {trade.unrealisedPnl?.toFixed?.(2) ?? "0.00"} GBP
-            </span>
-          </div>
-        </div>
-      );
-    })
-  )}
-</div>
+  </div>
+)}
 
 {/* ── HISTORY ── */}
 {tab === "history" && (
@@ -722,31 +619,58 @@ const dailyProfitFactor =
       <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
       <StatPill label="Profit Factor" value={pf.toString()} color={parseFloat(pf) >= 1.5 ? C.green : C.amber} />
       <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} sub={currency} />
-      <StatPill label="Avg Win" value={avgWin > 0 ? `+£${avgWin.toFixed(2)}` : "—"} color={C.green} />
-      <StatPill label="Avg Loss" value={avgLoss > 0 ? `-£${avgLoss.toFixed(2)}` : "—"} color={C.red} />
-      <StatPill label="R:R Ratio" value={rr > 0 ? `${rr.toFixed(2)}:1` : "—"} color={rr >= 2 ? C.green : rr >= 1.5 ? C.amber : C.red} />
-      <StatPill label="Expectancy" value={expectancy !== 0 ? `£${expectancy.toFixed(2)}` : "—"} color={expectancy >= 0 ? C.green : C.red} sub="per trade" />
     </div>
 
-    {bestTrade && worstTrade && (
-       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.green}33` }}>
-          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Best Trade</p>
-          <p className="text-lg font-black font-mono" style={{ color: C.green }}>+£{bestTrade.pnl.toFixed(2)}</p>
-          <p className="text-xs font-mono mt-1" style={{ color: C.muted }}>{bestTrade.instrument?.replace("_", "/")} · +{bestTrade.pips?.toFixed(1)}p</p>
+    <button
+      onClick={() => setTab("backtest")}
+      className="w-full flex items-center justify-between p-4 rounded-2xl active:scale-98 transition-transform"
+      style={{ background: C.s1, border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center gap-3">
+        <FlaskConical className="w-5 h-5" style={{ color: C.blue }} />
+        <span className="text-sm font-bold">Run a Backtest</span>
+      </div>
+      <ChevronRight className="w-4 h-4" style={{ color: C.muted }} />
+    </button>
+
+    {(history ?? []).map((trade: any, i: number) => (
+      <div
+        key={i}
+        className="rounded-2xl overflow-hidden active:scale-[0.98] transition-transform cursor-pointer"
+        onClick={() => setSelectedTrade(trade)}
+        style={{
+          background: C.s1,
+          border: `1px solid ${trade.won ? C.green + "33" : C.red + "33"}`,
+        }}
+      >
+        <div className="flex items-center justify-between px-4 py-4">
+          <div>
+            <p className="text-base font-black">{trade.instrument?.replace("_", "/")}</p>
+            <p className="text-xs" style={{ color: C.muted }}>{trade.direction} · {trade.closeReason ?? "—"}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-base font-black font-mono" style={{ color: trade.won ? C.green : C.red }}>
+              {trade.won ? "+" : ""}{(trade.pnl ?? 0).toFixed(2)} {currency}
+            </p>
+            <p className="text-xs font-mono" style={{ color: C.muted }}>
+              {(trade.pips ?? 0).toFixed(1)} pips
+            </p>
+          </div>
         </div>
-        <div className="rounded-2xl p-4" style={{ background: C.s1, border: `1px solid ${C.red}33` }}>
-          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>Worst Trade</p>
-          <p className="text-lg font-black font-mono" style={{ color: C.red }}>£{worstTrade.pnl.toFixed(2)}</p>
-          <p className="text-xs font-mono mt-1" style={{ color: C.muted }}>{worstTrade.instrument?.replace("_", "/")} · {worstTrade.pips?.toFixed(1)}p</p>
-        </div>
+      </div>
+    ))}
+
+    {(!history || history.length === 0) && (
+      <div
+        className="rounded-3xl p-10 flex flex-col items-center gap-3"
+        style={{ background: C.s1, border: `1px solid ${C.border}` }}
+      >
+        <Target className="w-10 h-10" style={{ color: C.muted }} />
+        <p className="text-sm font-bold" style={{ color: C.muted }}>No closed trades yet</p>
       </div>
     )}
   </div>
 )}
-</div>
-)}
-
 
             {/* Backtest link */}
             <button onClick={() => setTab("backtest")}
@@ -813,7 +737,6 @@ const dailyProfitFactor =
               </div>
             )}
           </div>
-        )}
 
         {/* ── BACKTEST (accessible from History tab button) ── */}
         {tab === "backtest" && (
