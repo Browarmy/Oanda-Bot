@@ -1147,38 +1147,53 @@ const dailyProfitFactor =
         )}
       </div>
 
-      {/* ── Bottom navigation bar ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-40"
+            {/* ── Bottom navigation bar ── */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-40"
         style={{
           background: "rgba(5, 12, 26, 0.97)",
           borderTop: `1px solid ${C.border}`,
           backdropFilter: "blur(20px)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        }}>
+        }}
+      >
         <div className="flex items-stretch">
           {navItems.map((item) => (
-            <button key={item.id}
+            <button
+              key={item.id}
               onClick={() => setTab(item.id)}
               className="flex-1 flex flex-col items-center justify-center py-3 gap-1 relative transition-all duration-150 active:scale-90"
-              style={{ color: tab === item.id ? C.amber : C.muted }}>
+              style={{ color: tab === item.id ? C.amber : C.muted }}
+            >
               {item.badge !== undefined && (
-                <div className="absolute top-2 right-1/2 translate-x-3 w-4 h-4 rounded-full flex items-center justify-center text-xs font-black"
-                  style={{ background: C.red, color: "#fff", fontSize: 9 }}>
+                <div
+                  className="absolute top-2 right-1/2 translate-x-3 w-4 h-4 rounded-full flex items-center justify-center text-xs font-black"
+                  style={{ background: C.red, color: "#fff", fontSize: 9 }}
+                >
                   {item.badge}
                 </div>
               )}
+
               <div style={{ color: tab === item.id ? C.amber : C.muted }}>
                 {item.icon}
               </div>
-              <span className="text-xs font-bold" style={{ fontSize: 10 }}>{item.label}</span>
+
+              <span className="text-xs font-bold" style={{ fontSize: 10 }}>
+                {item.label}
+              </span>
+
               {tab === item.id && (
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
-                  style={{ background: C.amber }} />
+                <div
+                  className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
+                  style={{ background: C.amber }}
+                />
               )}
             </button>
           ))}
         </div>
       </div>
+    </div>
+
     {selectedTrade && (
       <TradeChartModal
         trade={selectedTrade}
@@ -1186,6 +1201,6 @@ const dailyProfitFactor =
         onClose={() => setSelectedTrade(null)}
       />
     )}
-    </>
-  );
+  </>
+);
 }
