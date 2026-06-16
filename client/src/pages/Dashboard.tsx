@@ -1244,7 +1244,6 @@ const dailyProfitFactor =
           ))}
         </div>
       </div>
-    </div>
     {selectedTrade && (
       <TradeChartModal
         trade={selectedTrade}
