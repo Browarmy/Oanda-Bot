@@ -39,26 +39,31 @@ export async function loadPersistentState<T>(
       return loadJsonFile(`${key}.json`, fallback);
     }
 
-    const rows = await db.execute(sql`
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS bot_learning_state (
+        \`key\` varchar(191) NOT NULL PRIMARY KEY,
+        \`value\` longtext NOT NULL,
+        updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    const rows: any = await db.execute(sql`
       SELECT \`value\`
       FROM bot_learning_state
       WHERE \`key\` = ${key}
       LIMIT 1
     `);
 
-    const data = rows as any;
-
     const value =
-      Array.isArray(data) && data[0]?.value
-        ? data[0].value
-        : Array.isArray(data?.rows) && data.rows[0]?.value
-          ? data.rows[0].value
-          : null;
+      rows?.[0]?.value ??
+      rows?.rows?.[0]?.value ??
+      null;
 
     if (!value) return fallback;
 
     return JSON.parse(value) as T;
-  } catch {
+  } catch (e) {
+    console.warn(`[PersistentMemory] DB load failed for ${key}:`, e);
     return loadJsonFile(`${key}.json`, fallback);
   }
 }
@@ -78,9 +83,19 @@ export async function savePersistentState(
     }
 
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS bot_learning_state (
+        \`key\` varchar(191) NOT NULL PRIMARY KEY,
+        \`value\` longtext NOT NULL,
+        updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    await db.execute(sql`
       INSERT INTO bot_learning_state (\`key\`, \`value\`, updated_at)
       VALUES (${key}, ${json}, NOW())
-      ON DUPLICATE KEY UPDATE \`value\` = ${json}, updated_at = NOW()
+      ON DUPLICATE KEY UPDATE
+        \`value\` = ${json},
+        updated_at = NOW()
     `);
   } catch (e) {
     console.warn(`[PersistentMemory] DB save failed for ${key}:`, e);
