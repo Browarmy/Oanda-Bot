@@ -672,67 +672,7 @@ const dailyProfitFactor =
   </div>
 )}
 
-            {/* Backtest link */}
-            <button onClick={() => setTab("backtest")}
-              className="w-full flex items-center justify-between p-4 rounded-2xl active:scale-98 transition-transform"
-              style={{ background: C.s1, border: `1px solid ${C.border}` }}>
-              <div className="flex items-center gap-3">
-                <FlaskConical className="w-5 h-5" style={{ color: C.blue }} />
-                <span className="text-sm font-bold">Run a Backtest</span>
-              </div>
-              <ChevronRight className="w-4 h-4" style={{ color: C.muted }} />
-            </button>
-
-            {(history ?? []).map((trade: any, i: number) => (
-              <div key={i} className="rounded-2xl overflow-hidden active:scale-[0.98] transition-transform cursor-pointer"
-                onClick={() => setSelectedTrade(trade)}
-                style={{ background: C.s1, border: `1px solid ${trade.won ? C.green + "33" : C.red + "33"}` }}>
-                {/* Top row: direction badge, pair, P&L */}
-                <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black px-2.5 py-1 rounded-full"
-                      style={{
-                        background: trade.direction === "BUY" ? "#00e67615" : "#ff444415",
-                        color: trade.direction === "BUY" ? C.green : C.red,
-                        border: `1px solid ${trade.direction === "BUY" ? C.green : C.red}33`,
-                      }}>{trade.direction}</span>
-                    <span className="text-base font-black">{trade.instrument?.replace("_", "/")}</span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-base font-black font-mono" style={{ color: trade.won ? C.green : C.red }}>
-                      {trade.won ? "+" : ""}{(trade.pnl ?? 0).toFixed(2)} {currency}
-                    </p>
-                    <p className="text-xs font-mono" style={{ color: trade.won ? C.green + "aa" : C.red + "aa" }}>
-                      {(trade.pips ?? 0) >= 0 ? "+" : ""}{(trade.pips ?? 0).toFixed(1)} pips
-                    </p>
-                  </div>
-                </div>
-                {/* Bottom row: entry, exit, reason, date */}
-                <div className="flex items-center gap-3 px-4 pb-3 pt-1"
-                  style={{ borderTop: `1px solid ${C.border}33` }}>
-                  <div className="flex-1">
-                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Entry</p>
-                    <p className="text-xs font-mono font-bold" style={{ color: C.text }}>{(trade.entryPrice ?? 0).toFixed(5)}</p>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Exit</p>
-                    <p className="text-xs font-mono font-bold" style={{ color: C.text }}>{(trade.exitPrice ?? 0).toFixed(5)}</p>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Reason</p>
-                    <p className="text-xs font-bold" style={{ color: C.mutedLight }}>{trade.closeReason ?? "—"}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs mb-0.5" style={{ color: C.muted }}>Date</p>
-                    <p className="text-xs" style={{ color: C.mutedLight }}>{trade.closedAt ? new Date(trade.closedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {(!history || history.length === 0) && (
-              <div className="rounded-3xl p-10 flex flex-col items-center gap-3"
-                style={{ background: C.s1, border: `1px solid ${C.border}` }}>
-                <Target className="w-10 h-10" style={{ color: C.muted }} />
+ get className="w-10 h-10" style={{ color: C.muted }} />
                 <p className="text-sm font-bold" style={{ color: C.muted }}>No closed trades yet</p>
               </div>
             )}
