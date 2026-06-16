@@ -588,7 +588,7 @@ const dailyProfitFactor =
                 </button>
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <StatPill label="Entry" value={trade.entryPrice.toFixed(dp)} />
                 <StatPill label="Now" value={currentPrice.toFixed(dp)} color={isProfit ? C.green : C.red} />
                 <StatPill label="SL" value={trade.stopLoss.toFixed(dp)} color={C.red} />
