@@ -338,8 +338,8 @@ export const appRouter = router({
       .input(z.object({ tradeId: z.string() }))
       .mutation(async ({ input }) => {
         if (!autonomousEngine.api) throw new Error("Engine not connected");
-        await autonomousEngine.api.closeTrade(input.tradeId);
-        return { success: true };
+        await autonomousEngine.closeTradeAndSync(input.tradeId);
+return { success: true };
       }),
 
     // Reset all stats to zero for a clean slate
