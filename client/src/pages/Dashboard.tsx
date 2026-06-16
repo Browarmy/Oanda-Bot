@@ -672,11 +672,6 @@ const dailyProfitFactor =
   </div>
 )}
 
- get className="w-10 h-10" style={{ color: C.muted }} />
-                <p className="text-sm font-bold" style={{ color: C.muted }}>No closed trades yet</p>
-              </div>
-            )}
-          </div>
 
         {/* ── BACKTEST (accessible from History tab button) ── */}
         {tab === "backtest" && (
