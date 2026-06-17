@@ -728,11 +728,8 @@ await strategyRegimeMatrix.load();
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
-    
-}
 
-
-        try {
+    try {
       const acct = await this.api.getAccount();
       this.state.accountBalance = acct.balance;
       this.state.accountEquity = acct.equity;
