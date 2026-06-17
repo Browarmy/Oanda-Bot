@@ -728,13 +728,7 @@ await strategyRegimeMatrix.load();
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
-    const evoStatus = learningEngine.getEvolutionStatus?.();
-    if (evoStatus) {
-    this.log(
-    `🧬 Learning status: v${evoStatus.currentVersion} | ` +
-    `${evoStatus.totalLearnedTrades} learned trades | ` +
-    `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} toward next evolution`
-  );
+    
 }
 
 
@@ -777,6 +771,14 @@ await strategyRegimeMatrix.load();
     }
 
      await this.backfillClosedTrades();
+const evoStatus = learningEngine.getEvolutionStatus?.();
+if (evoStatus) {
+  this.log(
+    `🧬 Learning status after backfill: v${evoStatus.currentVersion} | ` +
+    `${evoStatus.totalLearnedTrades} learned trades | ` +
+    `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} toward next evolution`
+  );
+}
 
     // === DAILY PERFORMANCE SUMMARY ===
     const winRate = this.state.totalTrades > 0 
@@ -933,7 +935,14 @@ added++;
       }
       this.state.tradeHistory.sort((a, b) => b.closedAt - a.closedAt);
       if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.splice(1000);
-      if (added > 0) this.log(`📊 Backfilled ${added} closed trades from OANDA`);
+      if (added > 0) {
+  await learningEngine.save();
+  await marketMemory.save();
+  await strategyRegimeMatrix.save();
+  await strategyGenome.save();
+
+  this.log(`📊 Backfilled ${added} closed trades from OANDA + synced learning`);
+}
     } catch (e: any) {
       this.log(`Backfill error: ${e.message}`);
     }
@@ -2274,6 +2283,10 @@ strategyGenome.recordTrade(
   won,
   pnl
 );
+await learningEngine.save();
+await marketMemory.save();
+await strategyRegimeMatrix.save();
+await strategyGenome.save();
 
   // === LEARNING EVOLUTION STATUS ===
 // Evolution is now handled inside learningEngine.recordTrade()
