@@ -205,7 +205,6 @@ const todayTrades = tradeHist.filter((t: any) => {
 });
 
 const dailyTrades = todayTrades.length;
-console.log("TODAY TRADES", todayTrades);
 
 const dailyWins = todayTrades.filter((t: any) => t.pnl > 0);
 
@@ -511,10 +510,28 @@ const dailyProfitFactor =
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatPill label="Total Trades" value={String(totalTrades)} />
-        <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
-        <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}£${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} />
-        <StatPill label="Expectancy" value={expectancy !== 0 ? `£${expectancy.toFixed(2)}` : "—"} color={expectancy >= 0 ? C.green : C.red} />
+<StatPill
+  label="Today Trades"
+  value={String(dailyTrades)}
+/>
+
+<StatPill
+  label="Today Win Rate"
+  value={`${dailyWinRate.toFixed(0)}%`}
+  color={dailyWinRate >= 55 ? C.green : dailyWinRate >= 40 ? C.amber : C.red}
+/>
+
+<StatPill
+  label="Today P&L"
+  value={`${dailyPnl >= 0 ? "+" : ""}£${dailyPnl.toFixed(2)}`}
+  color={dailyPnl >= 0 ? C.green : C.red}
+/>
+
+<StatPill
+  label="Today Expectancy"
+  value={dailyTrades > 0 ? `£${dailyExpectancy.toFixed(2)}` : "—"}
+  color={dailyExpectancy >= 0 ? C.green : C.red}
+/>
       </div>
     </div>
 
