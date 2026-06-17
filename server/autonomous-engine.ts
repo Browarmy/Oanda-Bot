@@ -52,6 +52,7 @@ import { evaluateAdaptiveExit } from "./adaptive-exit";
 import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import { evaluateSafetyGovernor } from "./safety-governor";
+import { evaluateExecutionIntelligence } from "./execution-intelligence";
 import {
   newsGuard,
   checkFvgRetest,
@@ -2061,6 +2062,60 @@ decisionJournal.record({
     metaComponents: metaApproval.components,
   },
 });
+
+const executionDecision = evaluateExecutionIntelligence({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  candles: m15,
+  entry,
+  atr: finalAtr,
+  spreadPips,
+  maxSpreadPips: this.state.config.maxSpreadPips,
+  confidence: finalConfidence,
+  regime: regime.regime,
+});
+
+if (executionDecision.action === "SKIP") {
+  this.log(`⚡ EXECUTION SKIP: ${executionDecision.reason}`);
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: executionDecision.reason,
+    extra: executionDecision,
+  });
+
+  return;
+}
+
+if (executionDecision.action === "WAIT") {
+  this.log(`⚡ EXECUTION WAIT: ${executionDecision.reason}`);
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: executionDecision.reason,
+    extra: executionDecision,
+  });
+
+  return;
+}
+
+this.log(`⚡ EXECUTION OK: ${executionDecision.reason}`);
 
 const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
 await decisionJournal.record({
