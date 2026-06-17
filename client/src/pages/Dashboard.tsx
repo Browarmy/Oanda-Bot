@@ -60,6 +60,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [connectError, setConnectError] = useState("");
   const [selectedTrade, setSelectedTrade] = useState<any | null>(null);
+  const utils = trpc.useUtils();
 
   const connectMutation = trpc.bot.connect.useMutation({
     onSuccess: () => setIsConnected(true),
@@ -94,14 +95,33 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     } catch { /* ignore audio errors */ }
   };
   const closeTradeMutation = trpc.bot.closeTrade.useMutation({
-    onMutate: ({ tradeId }) => {
-      setClosingTrades(prev => { const n = new Set(Array.from(prev)); n.add(tradeId); return n; });
-      playSound('close');
-    },
-    onSettled: (_data, _err, { tradeId }) => {
-      setClosingTrades(prev => { const n = new Set(prev); n.delete(tradeId); return n; });
-    },
-  });
+  onMutate: ({ tradeId }) => {
+    setClosingTrades(prev => {
+      const n = new Set(prev);
+      n.add(tradeId);
+      return n;
+    });
+
+    playSound("close");
+  },
+
+  onSuccess: async () => {
+    await utils.bot.getState.invalidate();
+    await utils.bot.getHistory.invalidate();
+    await utils.bot.getLearningInsights.invalidate();
+    await utils.bot.getMemoryDashboard.invalidate();
+    await utils.bot.getDecisionJournal.invalidate();
+    await utils.bot.getFundedReadiness.invalidate();
+  },
+
+  onSettled: (_data, _err, { tradeId }) => {
+    setClosingTrades(prev => {
+      const n = new Set(prev);
+      n.delete(tradeId);
+      return n;
+    });
+  },
+});
   const resetStatsMutation = trpc.bot.resetStats.useMutation({
     onSuccess: () => { playSound('reset'); },
   });
