@@ -60,6 +60,7 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [connectError, setConnectError] = useState("");
   const [selectedTrade, setSelectedTrade] = useState<any | null>(null);
+  const utils = trpc.useUtils();
 
   const connectMutation = trpc.bot.connect.useMutation({
     onSuccess: () => setIsConnected(true),
@@ -94,14 +95,33 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     } catch { /* ignore audio errors */ }
   };
   const closeTradeMutation = trpc.bot.closeTrade.useMutation({
-    onMutate: ({ tradeId }) => {
-      setClosingTrades(prev => { const n = new Set(Array.from(prev)); n.add(tradeId); return n; });
-      playSound('close');
-    },
-    onSettled: (_data, _err, { tradeId }) => {
-      setClosingTrades(prev => { const n = new Set(prev); n.delete(tradeId); return n; });
-    },
-  });
+  onMutate: ({ tradeId }) => {
+    setClosingTrades(prev => {
+      const n = new Set(prev);
+      n.add(tradeId);
+      return n;
+    });
+
+    playSound("close");
+  },
+
+  onSuccess: async () => {
+    await utils.bot.getState.invalidate();
+    await utils.bot.getHistory.invalidate();
+    await utils.bot.getLearningInsights.invalidate();
+    await utils.bot.getMemoryDashboard.invalidate();
+    await utils.bot.getDecisionJournal.invalidate();
+    await utils.bot.getFundedReadiness.invalidate();
+  },
+
+  onSettled: (_data, _err, { tradeId }) => {
+    setClosingTrades(prev => {
+      const n = new Set(prev);
+      n.delete(tradeId);
+      return n;
+    });
+  },
+});
   const resetStatsMutation = trpc.bot.resetStats.useMutation({
     onSuccess: () => { playSound('reset'); },
   });
@@ -205,7 +225,6 @@ const todayTrades = tradeHist.filter((t: any) => {
 });
 
 const dailyTrades = todayTrades.length;
-console.log("TODAY TRADES", todayTrades);
 
 const dailyWins = todayTrades.filter((t: any) => t.pnl > 0);
 
@@ -511,10 +530,28 @@ const dailyProfitFactor =
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatPill label="Total Trades" value={String(totalTrades)} />
-        <StatPill label="Win Rate" value={`${winRate}%`} color={winRate >= 55 ? C.green : C.amber} />
-        <StatPill label="Total P&L" value={`${totalPnl >= 0 ? "+" : ""}£${totalPnl.toFixed(2)}`} color={totalPnl >= 0 ? C.green : C.red} />
-        <StatPill label="Expectancy" value={expectancy !== 0 ? `£${expectancy.toFixed(2)}` : "—"} color={expectancy >= 0 ? C.green : C.red} />
+<StatPill
+  label="Today Trades"
+  value={String(dailyTrades)}
+/>
+
+<StatPill
+  label="Today Win Rate"
+  value={`${dailyWinRate.toFixed(0)}%`}
+  color={dailyWinRate >= 55 ? C.green : dailyWinRate >= 40 ? C.amber : C.red}
+/>
+
+<StatPill
+  label="Today P&L"
+  value={`${dailyPnl >= 0 ? "+" : ""}£${dailyPnl.toFixed(2)}`}
+  color={dailyPnl >= 0 ? C.green : C.red}
+/>
+
+<StatPill
+  label="Today Expectancy"
+  value={dailyTrades > 0 ? `£${dailyExpectancy.toFixed(2)}` : "—"}
+  color={dailyExpectancy >= 0 ? C.green : C.red}
+/>
       </div>
     </div>
 

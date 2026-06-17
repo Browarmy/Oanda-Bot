@@ -872,10 +872,64 @@ if (cutoff > 0) {
           won: pnl > 0, closeReason,
         };
         this.state.tradeHistory.push(closed);
-        if (pnl > 0) this.state.totalWins++; else this.state.totalLosses++;
-        this.state.totalPnl += pnl;
-        this.state.totalTrades++;
-        added++;
+
+if (pnl > 0) this.state.totalWins++;
+else this.state.totalLosses++;
+
+this.state.totalPnl += pnl;
+this.state.totalTrades++;
+
+// Feed historical trades into the learning systems
+learningEngine.recordTrade({
+  instrument,
+  direction,
+  won: pnl > 0,
+  pnl,
+  pips: parseFloat(pips.toFixed(1)),
+  rsi: 50,
+  macd: 0,
+  bbPosition: 0.5,
+  atr: 0,
+  entryPrice,
+  ema9: entryPrice,
+  ema21: entryPrice,
+  openTime: new Date(t.openTime).getTime(),
+  closedAt: t.closeTime
+    ? new Date(t.closeTime).getTime()
+    : Date.now(),
+  regime: "BACKFILLED",
+  strategy: "BACKFILLED",
+  confidence: 0,
+});
+
+marketMemory.record({
+  time: t.closeTime
+    ? new Date(t.closeTime).getTime()
+    : Date.now(),
+  instrument,
+  direction,
+  strategy: "BACKFILLED",
+  regime: "BACKFILLED",
+  confidence: 0,
+  won: pnl > 0,
+  pnl,
+  pips: parseFloat(pips.toFixed(1)),
+});
+
+strategyRegimeMatrix.record(
+  "BACKFILLED",
+  "BACKFILLED",
+  pnl > 0,
+  pnl
+);
+
+strategyGenome.recordTrade(
+  "BACKFILLED",
+  pnl > 0,
+  pnl
+);
+
+added++;
       }
       this.state.tradeHistory.sort((a, b) => b.closedAt - a.closedAt);
       if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.splice(1000);
@@ -2360,6 +2414,20 @@ const trailMult = R >= 3.0
     }
   }
 
+async closeTradeAndSync(tradeId: string) {
+  if (!this.api) throw new Error("Engine not connected");
+
+  await this.api.closeTrade(tradeId);
+
+  const openTrades = await this.api.getOpenTrades();
+  this.state.openTrades = openTrades;
+  this.state.openTradesCount = openTrades.length;
+
+  await this.checkClosedTrades(openTrades);
+  await this.backfillClosedTrades();
+
+  this.state.lastUpdate = Date.now();
+}
 
     resetStats() {
     this.state.totalTrades = 0;
