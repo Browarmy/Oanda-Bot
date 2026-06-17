@@ -2360,6 +2360,20 @@ const trailMult = R >= 3.0
     }
   }
 
+async closeTradeAndSync(tradeId: string) {
+  if (!this.api) throw new Error("Engine not connected");
+
+  await this.api.closeTrade(tradeId);
+
+  const openTrades = await this.api.getOpenTrades();
+  this.state.openTrades = openTrades;
+  this.state.openTradesCount = openTrades.length;
+
+  await this.checkClosedTrades(openTrades);
+  await this.backfillClosedTrades();
+
+  this.state.lastUpdate = Date.now();
+}
 
     resetStats() {
     this.state.totalTrades = 0;
