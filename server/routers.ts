@@ -31,6 +31,10 @@ import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { configureTelegram, getTelegramConfig } from "./telegram-notifier";
 import { dailyReportStore } from "./daily-report";
 import {
+  dailyReportStore,
+  formatDailyReportTelegram,
+} from "./daily-report";
+import {
   configureTelegram,
   getTelegramConfig,
   sendTelegramTestMessage,
