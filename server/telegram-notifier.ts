@@ -29,7 +29,7 @@ export function getTelegramConfig(): { enabled: boolean; hasToken: boolean; hasC
 
 // ─── Core send ────────────────────────────────────────────────────────────────
 
-async function sendMessage(text: string): Promise<boolean> {
+export async function sendTelegramMessage(text: string): Promise<boolean> {
   if (!_enabled || !_token || !_chatId) return false;
   try {
     const url = `https://api.telegram.org/bot${_token}/sendMessage`;
@@ -50,7 +50,7 @@ async function sendMessage(text: string): Promise<boolean> {
 }
 
 export async function sendTelegramTestMessage() {
-  const sent = await sendMessage(
+  const sent = await sendTelegramMessage(
     "✅ Telegram connected successfully — OANDA Bot alerts are active."
   );
 
@@ -97,7 +97,7 @@ export async function notifyTradeOpen(params: {
     `🤖 Confidence: ${(confidence * 100).toFixed(0)}%`,
     `📝 ${reason}`,
   ].join("\n");
-  await sendMessage(msg);
+  await sendTelegramMessage(msg);
 }
 
 export async function notifyTradeClose(params: {
@@ -129,7 +129,7 @@ export async function notifyTradeClose(params: {
     ``,
     `📝 ${reason}`,
   ].join("\n");
-  await sendMessage(msg);
+  await sendTelegramMessage(msg);
 }
 
 export async function notifyDailyLossGuard(params: {
@@ -147,7 +147,7 @@ export async function notifyDailyLossGuard(params: {
     `Trading paused for the rest of the day.`,
     `Bot will resume tomorrow automatically.`,
   ].join("\n");
-  await sendMessage(msg);
+  await sendTelegramMessage(msg);
 }
 
 export async function notifyBotStatus(status: "STARTED" | "STOPPED" | "PAUSED" | "RESUMED", details?: string): Promise<void> {
@@ -156,7 +156,7 @@ export async function notifyBotStatus(status: "STARTED" | "STOPPED" | "PAUSED" |
     `${emojis[status]} <b>BOT ${status}</b>`,
     details ? `\n${details}` : "",
   ].join("\n");
-  await sendMessage(msg);
+  await sendTelegramMessage(msg);
 }
 
 export async function notifyPropFirmAlert(params: {
@@ -171,5 +171,5 @@ export async function notifyPropFirmAlert(params: {
     TOTAL_DRAWDOWN: `🚨 <b>PROP FIRM: Max Drawdown Reached</b>\nDrawdown: ${current.toFixed(2)}%\nLimit: ${limit.toFixed(2)}%\nTrading HALTED.`,
     TARGET_HIT: `🎯 <b>PROP FIRM: Profit Target Reached!</b>\nProfit: +${current.toFixed(2)} ${currency}\nTarget: ${limit.toFixed(2)} ${currency}\nConsider stopping and submitting.`,
   };
-  await sendMessage(messages[type]);
+  await sendTelegramMessage(messages[type]);
 }
