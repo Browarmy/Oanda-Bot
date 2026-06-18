@@ -30,6 +30,11 @@ import { strategyGenome } from "./strategy-genome";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { configureTelegram, getTelegramConfig } from "./telegram-notifier";
 import { dailyReportStore } from "./daily-report";
+import {
+  configureTelegram,
+  getTelegramConfig,
+  sendTelegramTestMessage,
+} from "./telegram-notifier";
 
 const multiBotManager = new MultiBotManager();
 
@@ -191,6 +196,8 @@ export const appRouter = router({
         await updateSessionConfig(1, sessionName, updates as any);
         return { success: true };
       }),
+
+
 
     // Check if currently in active session
     isActive: publicProcedure.query(async ({ ctx }) => {
@@ -514,7 +521,18 @@ getDecisionJournal: publicProcedure.query(async () => {
       }),
 
     // ── Telegram Config ───────────────────────────────────────────────────────
-    setTelegramConfig: publicProcedure
+    testTelegram: publicProcedure.mutation(async () => {
+  try {
+    return await sendTelegramTestMessage();
+  } catch (e: any) {
+    return {
+      success: false,
+      error: e?.message ?? "Telegram test failed",
+    };
+  }
+}),
+
+setTelegramConfig: publicProcedure
       .input(z.object({
         token: z.string(),
         chatId: z.string(),
