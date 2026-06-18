@@ -25,6 +25,7 @@ import { learningEngine } from "./learning-engine";
 import { runBacktest } from "./backtest-engine";
 import { decisionJournal } from "./decision-journal";
 import { analyseDecisions } from "./decision-analytics";
+import { getPersistentMemoryStatus } from "./persistent-memory";
 import { marketMemory } from "./market-memory";
 import { strategyGenome } from "./strategy-genome";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
@@ -444,6 +445,10 @@ getDecisionJournal: publicProcedure.query(async () => {
     analytics: analyseDecisions(all),
     recent: decisionJournal.getRecent(50),
   };
+}),
+
+getPersistentMemoryStatus: publicProcedure.query(async () => {
+  return getPersistentMemoryStatus();
 }),
 
     // Get funded account readiness
