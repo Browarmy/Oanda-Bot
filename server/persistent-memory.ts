@@ -3,7 +3,10 @@ import path from "node:path";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR =
+  process.env.PERSISTENT_DATA_DIR ||
+  process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+  path.join(process.cwd(), "data");
 
 export async function loadJsonFile<T>(fileName: string, fallback: T): Promise<T> {
   try {
@@ -101,4 +104,15 @@ export async function savePersistentState(
     console.warn(`[PersistentMemory] DB save failed for ${key}:`, e);
     await saveJsonFile(`${key}.json`, data);
   }
+}
+export async function getPersistentMemoryStatus() {
+  const db = await getDb();
+
+  return {
+    primaryStore: db ? "database" : "file",
+    fileFallbackDir: DATA_DIR,
+    hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+    railwayVolumeMountPath: process.env.RAILWAY_VOLUME_MOUNT_PATH ?? null,
+    persistentDataDir: process.env.PERSISTENT_DATA_DIR ?? null,
+  };
 }
