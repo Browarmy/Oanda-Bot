@@ -143,4 +143,25 @@ class DailyReportStore {
   }
 }
 
+export function formatDailyReportTelegram(report: DailyReport) {
+  return [
+    `📊 <b>DAILY FUNDED REPORT</b>`,
+    ``,
+    `Date: <b>${report.date}</b>`,
+    `Status: <b>${report.botStatus}</b>`,
+    ``,
+    `Trades: <b>${report.dailyTrades}</b>`,
+    `Wins/Losses: <b>${report.dailyWins}W / ${report.dailyLosses}L</b>`,
+    `Win Rate: <b>${(report.dailyWinRate * 100).toFixed(1)}%</b>`,
+    ``,
+    `Daily P&L: <b>${report.dailyPnl >= 0 ? "+" : ""}${report.dailyPnl.toFixed(2)} ${report.accountCurrency}</b>`,
+    `Total P&L: <b>${report.totalPnl >= 0 ? "+" : ""}${report.totalPnl.toFixed(2)} ${report.accountCurrency}</b>`,
+    `Equity: <b>${report.accountEquity.toFixed(2)} ${report.accountCurrency}</b>`,
+    ``,
+    `Max DD: <b>${report.maxDrawdownPct.toFixed(2)}%</b>`,
+    `Open Trades: <b>${report.openTradesCount}</b>`,
+    `Risk: <b>${report.riskPercent}%</b>`,
+  ].join("\n");
+}
+
 export const dailyReportStore = new DailyReportStore();
