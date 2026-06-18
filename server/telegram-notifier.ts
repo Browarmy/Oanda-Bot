@@ -49,6 +49,18 @@ async function sendMessage(text: string): Promise<boolean> {
   }
 }
 
+export async function sendTelegramTestMessage() {
+  const sent = await sendMessage(
+    "✅ Telegram connected successfully — OANDA Bot alerts are active."
+  );
+
+  if (!sent) {
+    throw new Error("Telegram not configured or message failed to send");
+  }
+
+  return { success: true };
+}
+
 // ─── Notification templates ───────────────────────────────────────────────────
 
 export async function notifyTradeOpen(params: {
