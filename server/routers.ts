@@ -29,6 +29,7 @@ import { marketMemory } from "./market-memory";
 import { strategyGenome } from "./strategy-genome";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
 import { configureTelegram, getTelegramConfig } from "./telegram-notifier";
+import { dailyReportStore } from "./daily-report";
 
 const multiBotManager = new MultiBotManager();
 
@@ -351,6 +352,15 @@ return { success: true };
     getHistory: publicProcedure.query(() => {
       return autonomousEngine.getState().tradeHistory;
     }),
+getDailyReports: publicProcedure.query(async () => {
+  await dailyReportStore.load();
+  return dailyReportStore.getAll();
+}),
+
+getTodayDailyReport: publicProcedure.query(async () => {
+  const state = autonomousEngine.getState();
+  return dailyReportStore.createSnapshot(state);
+}),
 
     // Get live prices for open positions
     getLivePrices: publicProcedure
