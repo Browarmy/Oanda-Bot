@@ -716,6 +716,8 @@ export class AutonomousEngine extends EventEmitter {
     this.state.isPaused = false;
     this.state.startedAt = Date.now();
     this.log("🚀 Bot v4 STARTED — quality signals, 1% risk, max 3 trades");
+await notifyTelegram("✅ OANDA Bot connected to Telegram")
+  .catch((e) => this.log(`⚠️ Telegram startup test failed: ${e.message}`));
     // Load persisted learning state from DB
     await learningEngine.load();
 await decisionJournal.load();
