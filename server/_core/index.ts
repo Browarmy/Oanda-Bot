@@ -36,6 +36,12 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  app.get("/api/memory-status", async (_req, res) => {
+    const { getPersistentMemoryStatus } = await import("../persistent-memory");
+    res.json(await getPersistentMemoryStatus());
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
