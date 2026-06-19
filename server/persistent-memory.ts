@@ -10,7 +10,7 @@ const DATA_DIR =
 
 async function ensurePersistentTable(db: any) {
   await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS bot_learning_state (
+    CREATE TABLE IF NOT EXISTS bot_persistent_state (
       \`key\` varchar(191) NOT NULL PRIMARY KEY,
       \`value\` longtext NOT NULL,
       updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -60,7 +60,7 @@ export async function loadPersistentState<T>(
 
     const rows: any = await db.execute(sql`
       SELECT \`value\`
-      FROM bot_learning_state
+      FROM bot_persistent_state
       WHERE \`key\` = ${key}
       LIMIT 1
     `);
@@ -100,7 +100,7 @@ export async function savePersistentState(
     await ensurePersistentTable(db);
 
     await db.execute(sql`
-      INSERT INTO bot_learning_state (\`key\`, \`value\`, updated_at)
+      INSERT INTO bot_persistent_state (\`key\`, \`value\`, updated_at)
       VALUES (${key}, ${json}, NOW())
       ON DUPLICATE KEY UPDATE
         \`value\` = ${json},
