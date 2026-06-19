@@ -17,8 +17,7 @@
  * converge on small datasets (100-500 trades) than deep learning.
  */
 
-import { getDb } from "./db";
-import { sql } from "drizzle-orm";
+import { loadPersistentState, savePersistentState } from "./persistent-memory";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -337,69 +336,61 @@ export class LearningEngine {
 
   // ── Persistence ──────────────────────────────────────────────────────────────
 
-  async load() {
-    try {
-      const db = await getDb();
-      if (!db) { console.log("[Learning] DB not available — starting fresh"); return; }
-      const rows = await db.execute(sql`SELECT \`key\`, \`value\` FROM bot_learning_state`);
-      const data = (rows[0] as unknown) as any[];
-      for (const row of data) {
-        try {
-          const parsed = JSON.parse(row.value);
-          if (row.key === "pairs") this.state.pairs = parsed;
-if (row.key === "sessions") this.state.sessions = parsed;
-if (row.key === "strategies") this.state.strategies = parsed;
-if (row.key === "confidenceBuckets") this.state.confidenceBuckets = parsed;
-if (row.key === "regimes") this.state.regimes = parsed;
-if (row.key === "params") this.state.params = { ...DEFAULT_PARAMS, ...parsed };
-          if (row.key === "patterns") this.state.patterns = parsed;
- if (row.key === "meta") {
-  this.state.totalEvolutions = parsed.totalEvolutions ?? 0;
-  this.state.lastEvolution = parsed.lastEvolution ?? Date.now();
-  this.state.insights = parsed.insights ?? [];
-  this.lastEvolutionTradeCount = parsed.lastEvolutionTradeCount ?? 0;
-}
-        } catch { /* skip malformed */ }
-      }
-      console.log(`[Learning] Loaded state: ${Object.keys(this.state.pairs).length} pairs, ${this.state.patterns.length} patterns, v${this.state.params.version}`);
-    } catch (e: any) {
-      // Table may not exist yet — will be created on first save
-      console.log(`[Learning] No saved state found (${e.message}) — starting fresh`);
-    }
-    // Start auto-save every 2 minutes
-    this.saveTimer = setInterval(() => { if (this.dirty) this.save(); }, 120_000);
+ async load() {
+  try {
+    const saved = await loadPersistentState<any>("learningEngine", {});
+
+    this.state.pairs = saved.pairs ?? this.state.pairs;
+    this.state.sessions = saved.sessions ?? this.state.sessions;
+    this.state.strategies = saved.strategies ?? this.state.strategies;
+    this.state.confidenceBuckets = saved.confidenceBuckets ?? this.state.confidenceBuckets;
+    this.state.regimes = saved.regimes ?? this.state.regimes;
+    this.state.params = { ...DEFAULT_PARAMS, ...(saved.params ?? {}) };
+    this.state.patterns = saved.patterns ?? this.state.patterns;
+    this.state.totalEvolutions = saved.totalEvolutions ?? this.state.totalEvolutions;
+    this.state.lastEvolution = saved.lastEvolution ?? this.state.lastEvolution;
+    this.state.insights = saved.insights ?? this.state.insights;
+
+    this.lastEvolutionTradeCount =
+      saved.lastEvolutionTradeCount ?? this.lastEvolutionTradeCount;
+
+    console.log(
+      `[Learning] Loaded persistent state: ${Object.keys(this.state.pairs).length} pairs, ` +
+      `${this.state.patterns.length} patterns, v${this.state.params.version}`
+    );
+  } catch (e: any) {
+    console.log(`[Learning] Load failed: ${e?.message ?? e}`);
   }
 
-  async save() {
-    try {
-      const db = await getDb();
-      if (!db) { console.log("[Learning] DB not available — cannot save"); return; }
-      const upsert = async (key: string, value: any) => {
-        const json = JSON.stringify(value);
-        await db.execute(sql`
-          INSERT INTO bot_learning_state (\`key\`, \`value\`, updated_at)
-          VALUES (${key}, ${json}, NOW())
-          ON DUPLICATE KEY UPDATE \`value\` = ${json}, updated_at = NOW()
-        `);
-      };
-      await upsert("pairs", this.state.pairs);
-await upsert("sessions", this.state.sessions);
-await upsert("strategies", this.state.strategies);
-await upsert("confidenceBuckets", this.state.confidenceBuckets);
-await upsert("regimes", this.state.regimes);
-await upsert("params", this.state.params);
-      await upsert("patterns", this.state.patterns.slice(-this.MAX_PATTERNS));
-await upsert("meta", {
-  totalEvolutions: this.state.totalEvolutions,
-  lastEvolution: this.state.lastEvolution,
-  lastEvolutionTradeCount: this.lastEvolutionTradeCount,
-  insights: this.state.insights.slice(-50),
-});
-      this.dirty = false;
-    } catch (e: any) {
-      console.log(`[Learning] Save failed: ${e.message}`);
-    }
+  this.saveTimer = setInterval(() => {
+    if (this.dirty) this.save();
+  }, 120_000);
+}
+
+async save() {
+  try {
+    await savePersistentState("learningEngine", {
+      pairs: this.state.pairs,
+      sessions: this.state.sessions,
+      strategies: this.state.strategies,
+      confidenceBuckets: this.state.confidenceBuckets,
+      regimes: this.state.regimes,
+      params: this.state.params,
+      patterns: this.state.patterns.slice(-this.MAX_PATTERNS),
+      totalEvolutions: this.state.totalEvolutions,
+      lastEvolution: this.state.lastEvolution,
+      insights: this.state.insights.slice(-50),
+      lastEvolutionTradeCount: this.lastEvolutionTradeCount,
+    });
+
+    this.dirty = false;
+  } catch (e: any) {
+    console.error("[Learning] Save failed");
+    console.error("Message:", e?.message);
+    console.error("Code:", e?.code);
+    console.error("SQL Message:", e?.sqlMessage);
   }
+}
 
   // ── Core learning: called after every trade closes ────────────────────────
 
