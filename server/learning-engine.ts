@@ -362,9 +362,11 @@ export class LearningEngine {
     console.log(`[Learning] Load failed: ${e?.message ?? e}`);
   }
 
-  this.saveTimer = setInterval(() => {
-    if (this.dirty) this.save();
-  }, 120_000);
+  if (!this.saveTimer) {
+    this.saveTimer = setInterval(() => {
+      if (this.dirty) this.save();
+    }, 120_000);
+  }
 }
 
 async save() {
@@ -412,9 +414,17 @@ closedAt: number;
 strategy?: string;
 regime?: string;
 confidence?: number;
-  }) {
-    const hour = new Date(trade.openTime).getUTCHours();
+    }) {
+    // Prevent historical OANDA backfill from re-teaching the AI every restart.
+    // Backfill should seed learning only when the learning DB is empty.
+    if (
+      (trade.strategy ?? "") === "BACKFILLED" &&
+      this.getTotalLearnedTrades() > 0
+    ) {
+      return;
+    }
 
+    const hour = new Date(trade.openTime).getUTCHours();
     // 1. Update pair learning
     if (!this.state.pairs[trade.instrument]) {
       this.state.pairs[trade.instrument] = defaultPairLearning(trade.instrument);
