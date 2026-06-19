@@ -37,7 +37,9 @@ export async function loadPersistentState<T>(
 ): Promise<T> {
   try {
     const db = await getDb();
-
+console.log(
+  `[PersistentMemory] LOAD ${key}: ${db ? "DB" : "JSON fallback"}`
+);
     if (!db) {
       return loadJsonFile(`${key}.json`, fallback);
     }
@@ -107,7 +109,9 @@ export async function savePersistentState(
 }
 export async function getPersistentMemoryStatus() {
   const db = await getDb();
-
+console.log(
+  `[PersistentMemory] SAVE ${key}: ${db ? "DB" : "JSON fallback"}`
+);
   return {
     primaryStore: db ? "database" : "file",
     fileFallbackDir: DATA_DIR,
