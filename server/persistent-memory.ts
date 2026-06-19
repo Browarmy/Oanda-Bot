@@ -16,11 +16,6 @@ async function ensurePersistentTable(db: any) {
       updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
-
-  await db.execute(sql`
-    ALTER TABLE bot_learning_state
-    MODIFY COLUMN \`value\` LONGTEXT NOT NULL
-  `);
 }
 
 export async function loadJsonFile<T>(fileName: string, fallback: T): Promise<T> {
