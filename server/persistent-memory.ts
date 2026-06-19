@@ -8,6 +8,21 @@ const DATA_DIR =
   process.env.RAILWAY_VOLUME_MOUNT_PATH ||
   path.join(process.cwd(), "data");
 
+async function ensurePersistentTable(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS bot_learning_state (
+      \`key\` varchar(191) NOT NULL PRIMARY KEY,
+      \`value\` longtext NOT NULL,
+      updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE bot_learning_state
+    MODIFY COLUMN \`value\` LONGTEXT NOT NULL
+  `);
+}
+
 export async function loadJsonFile<T>(fileName: string, fallback: T): Promise<T> {
   try {
     await mkdir(DATA_DIR, { recursive: true });
@@ -37,20 +52,16 @@ export async function loadPersistentState<T>(
 ): Promise<T> {
   try {
     const db = await getDb();
-console.log(
-  `[PersistentMemory] LOAD ${key}: ${db ? "DB" : "JSON fallback"}`
-);
+
+    console.log(
+      `[PersistentMemory] LOAD ${key}: ${db ? "DB" : "JSON fallback"}`
+    );
+
     if (!db) {
       return loadJsonFile(`${key}.json`, fallback);
     }
 
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS bot_learning_state (
-        \`key\` varchar(191) NOT NULL PRIMARY KEY,
-        \`value\` longtext NOT NULL,
-        updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
+    await ensurePersistentTable(db);
 
     const rows: any = await db.execute(sql`
       SELECT \`value\`
@@ -82,18 +93,16 @@ export async function savePersistentState(
   try {
     const db = await getDb();
 
+    console.log(
+      `[PersistentMemory] SAVE ${key}: ${db ? "DB" : "JSON fallback"}`
+    );
+
     if (!db) {
       await saveJsonFile(`${key}.json`, data);
       return;
     }
 
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS bot_learning_state (
-        \`key\` varchar(191) NOT NULL PRIMARY KEY,
-        \`value\` longtext NOT NULL,
-        updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
+    await ensurePersistentTable(db);
 
     await db.execute(sql`
       INSERT INTO bot_learning_state (\`key\`, \`value\`, updated_at)
@@ -107,11 +116,10 @@ export async function savePersistentState(
     await saveJsonFile(`${key}.json`, data);
   }
 }
+
 export async function getPersistentMemoryStatus() {
   const db = await getDb();
-console.log(
-  `[PersistentMemory] SAVE ${key}: ${db ? "DB" : "JSON fallback"}`
-);
+
   return {
     primaryStore: db ? "database" : "file",
     fileFallbackDir: DATA_DIR,
