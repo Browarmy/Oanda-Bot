@@ -48,9 +48,7 @@ export async function loadPersistentState<T>(
   try {
     const db = await getDb();
 
-    console.log(
-      `[PersistentMemory] LOAD ${key}: ${db ? "DB" : "JSON fallback"}`
-    );
+
 
     if (!db) {
       return loadJsonFile(`${key}.json`, fallback);
@@ -88,9 +86,6 @@ export async function savePersistentState(
   try {
     const db = await getDb();
 
-    console.log(
-      `[PersistentMemory] SAVE ${key}: ${db ? "DB" : "JSON fallback"}`
-    );
 
     if (!db) {
       await saveJsonFile(`${key}.json`, data);
