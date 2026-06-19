@@ -8,7 +8,11 @@ const DATA_DIR =
   process.env.RAILWAY_VOLUME_MOUNT_PATH ||
   path.join(process.cwd(), "data");
 
+let tableEnsured = false;
+
 async function ensurePersistentTable(db: any) {
+  if (tableEnsured) return;
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS bot_persistent_state (
       \`key\` varchar(191) NOT NULL PRIMARY KEY,
@@ -16,6 +20,8 @@ async function ensurePersistentTable(db: any) {
       updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
+
+  tableEnsured = true;
 }
 
 export async function loadJsonFile<T>(fileName: string, fallback: T): Promise<T> {
@@ -48,8 +54,6 @@ export async function loadPersistentState<T>(
   try {
     const db = await getDb();
 
-
-
     if (!db) {
       return loadJsonFile(`${key}.json`, fallback);
     }
@@ -63,10 +67,8 @@ export async function loadPersistentState<T>(
       LIMIT 1
     `);
 
-    const value =
-      rows?.[0]?.value ??
-      rows?.rows?.[0]?.value ??
-      null;
+    const resultRows = rows?.[0] ?? rows?.rows ?? [];
+    const value = resultRows?.[0]?.value ?? null;
 
     if (!value) return fallback;
 
@@ -81,11 +83,8 @@ export async function savePersistentState(
   key: string,
   data: unknown
 ): Promise<void> {
-  const json = JSON.stringify(data);
-
   try {
     const db = await getDb();
-
 
     if (!db) {
       await saveJsonFile(`${key}.json`, data);
@@ -93,6 +92,8 @@ export async function savePersistentState(
     }
 
     await ensurePersistentTable(db);
+
+    const json = JSON.stringify(data);
 
     await db.execute(sql`
       INSERT INTO bot_persistent_state (\`key\`, \`value\`, updated_at)
