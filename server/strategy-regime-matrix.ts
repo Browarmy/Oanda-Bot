@@ -119,6 +119,11 @@ class StrategyRegimeMatrix {
     return Array.from(this.cells.values());
   }
 
+async reset() {
+  this.cells.clear();
+  await this.save();
+}
+
   getSummary() {
     const all = this.getAll();
 
