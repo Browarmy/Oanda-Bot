@@ -435,6 +435,31 @@ getMemoryDashboard: publicProcedure.query(async () => {
   };
 }),
 
+resetSecondaryAiMemory: publicProcedure.mutation(async () => {
+  await marketMemory.load();
+  await strategyGenome.load();
+  await strategyRegimeMatrix.load();
+
+  await marketMemory.reset();
+  await strategyGenome.reset();
+  await strategyRegimeMatrix.reset();
+
+  return {
+    success: true,
+    reset: [
+      "marketMemory",
+      "strategyGenome",
+      "strategyRegimeMatrix",
+    ],
+    preserved: [
+      "learningEngine",
+      "tradeHistory",
+      "dailyReports",
+      "decisionJournal",
+    ],
+  };
+}),
+
 getDecisionJournal: publicProcedure.query(async () => {
   await decisionJournal.load();
 
