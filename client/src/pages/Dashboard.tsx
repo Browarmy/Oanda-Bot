@@ -130,6 +130,15 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     onSuccess: () => setTelegramSaved(true),
   });
   const backtestMutation = trpc.bot.runBacktest.useMutation();
+const resetSecondaryAiMemoryMutation =
+  trpc.bot.resetSecondaryAiMemory.useMutation({
+    onSuccess: async () => {
+      playSound("reset");
+      await utils.bot.getMemoryDashboard.invalidate();
+      await utils.bot.getDecisionJournal.invalidate();
+      await utils.bot.getLearningInsights.invalidate();
+    },
+  });
 
   const { data: state } = trpc.bot.getState.useQuery(undefined, {
     enabled: isConnected,
@@ -812,6 +821,31 @@ const dailyProfitFactor =
 {memoryDashboard && (
   <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
     <SectionTitle>🧠 Engine Brain</SectionTitle>
+<button
+  onClick={() => {
+    if (
+      window.confirm(
+        "Reset secondary AI memory? This clears Market Memory, Strategy Genome, and Strategy-Regime Matrix only. Learning Engine v4 is preserved."
+      )
+    ) {
+      resetSecondaryAiMemoryMutation.mutate();
+    }
+  }}
+  disabled={resetSecondaryAiMemoryMutation.isPending}
+  className="w-full mb-3 py-3 rounded-2xl font-black text-xs tracking-wide active:scale-95 transition-transform disabled:opacity-50"
+  style={{
+    background: "#ff990015",
+    border: "1px solid #ff990033",
+    color: "#ff9900",
+  }}
+>
+  {resetSecondaryAiMemoryMutation.isPending
+    ? "Resetting..."
+    : resetSecondaryAiMemoryMutation.isSuccess
+      ? "✓ Secondary AI Memory Reset"
+      : "Reset Secondary AI Memory"}
+</button>
+
 
     <div className="grid grid-cols-2 gap-3 mb-3">
       <StatPill
