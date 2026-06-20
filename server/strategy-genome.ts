@@ -82,6 +82,11 @@ export class StrategyGenomeEngine {
     return Array.from(this.genomes.values());
   }
 
+async reset() {
+  this.genomes.clear();
+  await this.save();
+}
+
   getSummary() {
     const all = this.getAll();
 
