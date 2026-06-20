@@ -325,6 +325,16 @@ function bollingerBands(values: number[], period = 20, stdDev = 2) {
   return { upper, middle: mean, lower, position };
 }
 
+function getPipSize(instrument: string): number {
+  if (instrument.includes("JPY")) return 0.01;
+  if (instrument.includes("XAU")) return 0.1;
+  if (instrument.includes("XAG")) return 0.01;
+  if (instrument.includes("BCO") || instrument.includes("WTICO")) return 0.01;
+  if (["UK100", "US30", "SPX", "NAS", "DE30", "JP225", "AU200"].some(x => instrument.includes(x))) return 1;
+  if (["BTC", "ETH", "LTC"].some(x => instrument.includes(x))) return 1;
+  return 0.0001;
+}
+
 // ─── Session helpers ──────────────────────────────────────────────────────────
 function getCurrentSession(): string {
   const h = new Date().getUTCHours();
@@ -853,8 +863,7 @@ if (cutoff > 0) {
         const exitPrice = parseFloat(t.averageClosePrice ?? t.price ?? "0");
         const direction: "BUY" | "SELL" = parseFloat(t.initialUnits) > 0 ? "BUY" : "SELL";
         const instrument = t.instrument ?? "UNKNOWN";
-        const isJpy = instrument.includes("JPY");
-        const pipSize = isJpy ? 0.01 : 0.0001;
+        const pipSize = getPipSize(instrument);
         const pips = (direction === "BUY" ? exitPrice - entryPrice : entryPrice - exitPrice) / pipSize;
         let closeReason = "MANUAL";
         const slPrice = t.stopLossOrder ? parseFloat(t.stopLossOrder.price ?? "0") : 0;
@@ -1084,7 +1093,8 @@ added++;
       pairStat.lastScan = Date.now();
 
       const isJpy = pairStat.instrument.includes("JPY");
-      const spreadPips = pairStat.spread / (isJpy ? 0.01 : 0.0001);
+const pipSize = getPipSize(pairStat.instrument);
+const spreadPips = pipSize > 0 ? pairStat.spread / pipSize : 0;
       if (spreadPips > this.state.config.maxSpreadPips) {
         this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${this.state.config.maxSpreadPips}p — SKIP`);
         return;
@@ -2250,8 +2260,7 @@ this.openTradeSnapshots.set(tradeId, {
         const direction: "BUY" | "SELL" = snap?.direction ?? (parseFloat(t.initialUnits) > 0 ? "BUY" : "SELL");
         const entryPrice = snap?.entryPrice ?? parseFloat(t.price ?? "0");
         const instrument = snap?.instrument ?? t.instrument ?? "UNKNOWN";
-        const isJpy = instrument.includes("JPY");
-        const pipSize = isJpy ? 0.01 : 0.0001;
+        const pipSize = getPipSize(instrument);
         const pips = (direction === "BUY" ? exitPrice - entryPrice : entryPrice - exitPrice) / pipSize;
         const won = pnl > 0;
         let closeReason = "MANUAL";
