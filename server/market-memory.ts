@@ -138,6 +138,11 @@ class MarketMemory {
     return [...this.memories];
   }
 
+  async reset() {
+    this.memories = [];
+    await this.save();
+  }
+
   getSummary() {
     const total = this.memories.length;
     const wins = this.memories.filter((m) => m.won).length;
