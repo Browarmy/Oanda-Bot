@@ -836,6 +836,8 @@ stop() {
     try {
       const closedTrades = await this.api.getClosedTrades(500);
       let added = 0;
+const seedAiFromBackfill =
+  learningEngine.getTotalLearnedTrades() === 0;
       for (const t of closedTrades) {
         if (this.recordedClosedIds.has(t.id)) continue;
 const cutoff = process.env.STATS_CUTOFF_DATE
@@ -880,6 +882,7 @@ this.state.totalPnl += pnl;
 this.state.totalTrades++;
 
 // Feed historical trades into the learning systems
+if (seedAiFromBackfill) {
 learningEngine.recordTrade({
   instrument,
   direction,
@@ -928,18 +931,23 @@ strategyGenome.recordTrade(
   pnl > 0,
   pnl
 );
+}
 
 added++;
       }
       this.state.tradeHistory.sort((a, b) => b.closedAt - a.closedAt);
       if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.splice(1000);
       if (added > 0) {
-  await learningEngine.save();
-  await marketMemory.save();
-  await strategyRegimeMatrix.save();
-  await strategyGenome.save();
+  if (seedAiFromBackfill) {
+    await learningEngine.save();
+    await marketMemory.save();
+    await strategyRegimeMatrix.save();
+    await strategyGenome.save();
 
-  this.log(`📊 Backfilled ${added} closed trades from OANDA + synced learning`);
+    this.log(`📊 Backfilled ${added} closed trades from OANDA + seeded AI learning`);
+  } else {
+    this.log(`📊 Backfilled ${added} closed trades from OANDA`);
+  }
 }
     } catch (e: any) {
       this.log(`Backfill error: ${e.message}`);
