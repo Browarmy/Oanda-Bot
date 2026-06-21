@@ -53,6 +53,7 @@ import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import { evaluateSafetyGovernor } from "./safety-governor";
 import { evaluateExecutionIntelligence } from "./execution-intelligence";
+import { evaluateTradeQuality } from "./trade-quality-engine";
 import {
   newsGuard,
   checkFvgRetest,
@@ -2135,6 +2136,86 @@ if (executionDecision.action === "WAIT") {
 
 this.log(`⚡ EXECUTION OK: ${executionDecision.reason}`);
 
+// ── ATHENA AI v5 — TRADE QUALITY ENGINE ───────────────────────────────────
+const athenaQuality = evaluateTradeQuality({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  confidence: finalConfidence,
+
+  pairScore: thresholdPairLearning?.score,
+  strategyScore: metaApproval.components.strategyScore,
+  regimeScore: metaApproval.components.regimeScore,
+  memoryScore: memoryCheck.similar?.score,
+  portfolioScore: Math.max(
+    0,
+    Math.min(1, 1 - (portfolioCheck.projectedHeatPct ?? 0) / 4)
+  ),
+  riskScore: Math.max(
+    0,
+    Math.min(1, 1 - (currentDrawdownPct ?? 0) / 5)
+  ),
+
+  spreadPips,
+  maxSpreadPips: this.state.config.maxSpreadPips,
+});
+
+if (!athenaQuality.approved) {
+  this.log(
+    `🧠 ATHENA BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    athenaQuality.reason
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Athena quality block: ${athenaQuality.reason}`,
+    extra: {
+      athenaQuality,
+      executionDecision,
+      portfolioCheck,
+      dynamicRisk,
+      currentDrawdownPct,
+    },
+  });
+
+  return;
+}
+
+this.log(
+  `🧠 ATHENA OK: ${pairStat.instrument} ${finalAction} — ` +
+  `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
+  `Edge +${athenaQuality.expectedEdgeR.toFixed(2)}R`
+);
+
+await decisionJournal.record({
+  type: "APPROVED",
+  stage: "EXECUTION",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: `Athena approved: ${athenaQuality.reason}`,
+  extra: {
+    athenaQuality,
+    executionDecision,
+    portfolioCheck,
+    dynamicRisk,
+    currentDrawdownPct,
+  },
+});
+
 const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
 await decisionJournal.record({
   type: "EXECUTED",
@@ -2154,6 +2235,8 @@ await decisionJournal.record({
     stopLoss: sl,
     takeProfit: tp,
     portfolioHeat: portfolioCheck.projectedHeatPct,
+athenaQuality,
+executionDecision,
   },
 });
 
