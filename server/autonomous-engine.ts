@@ -55,6 +55,7 @@ import { evaluateSafetyGovernor } from "./safety-governor";
 import { evaluateExecutionIntelligence } from "./execution-intelligence";
 import { evaluateTradeQuality } from "./trade-quality-engine";
 import { evaluateAthenaConfidence } from "./athena-confidence-engine";
+import { evaluateExpectedValue } from "./expected-value-engine";
 import {
   newsGuard,
   checkFvgRetest,
@@ -2189,6 +2190,21 @@ const athenaQuality = evaluateTradeQuality({
   maxSpreadPips: this.state.config.maxSpreadPips,
 });
 
+const ev = evaluateExpectedValue({
+
+    confidence: athenaConfidence.confidence,
+
+    expectedWinRate:
+        thresholdPairLearning?.winRate ?? 0.55,
+
+    averageWinR:
+        thresholdPairLearning?.averageWinR ?? 2.0,
+
+    averageLossR:
+        thresholdPairLearning?.averageLossR ?? 1.0,
+
+});
+
 if (!athenaConfidence.approved) {
   this.log(
     `🧠 ATHENA CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
@@ -2222,6 +2238,43 @@ if (!athenaQuality.approved) {
     athenaQuality.reason
   );
 
+if (!ev.approved) {
+
+    this.log(
+        `📈 EV BLOCK: ${pairStat.instrument} ${finalAction} — ${ev.reason}`
+    );
+
+    await decisionJournal.record({
+
+        type: "BLOCKED",
+
+        stage: "EXECUTION",
+
+        instrument: pairStat.instrument,
+
+        direction: finalAction,
+
+        confidence: finalConfidence,
+
+        metaScore: metaApproval.metaScore,
+
+        riskPct: effectiveRiskPct,
+
+        strategy: metaStrategy,
+
+        regime: metaRegime,
+
+        reason: ev.reason,
+
+        extra: {
+            ev
+        }
+
+    });
+
+    return;
+}
+
   await decisionJournal.record({
     type: "BLOCKED",
     stage: "EXECUTION",
@@ -2246,10 +2299,10 @@ if (!athenaQuality.approved) {
 }
 
 this.log(
-  `🧠 ATHENA OK: ${pairStat.instrument} ${finalAction} — ` +
-  `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
-  `Conf ${athenaConfidence.score}/100 | ` +
-  `Edge +${athenaQuality.expectedEdgeR.toFixed(2)}R`
+    `🧠 ATHENA APPROVED: ${pairStat.instrument} ${finalAction} | ` +
+    `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
+    `Conf ${athenaConfidence.score}/100 | ` +
+    `EV ${ev.expectedValue.toFixed(2)}R`
 );
 
 await decisionJournal.record({
