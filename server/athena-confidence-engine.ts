@@ -78,7 +78,7 @@ export function evaluateAthenaConfidence(
 
     };
 
-    const totalWeight=100;
+    const totalWeight = Object.values(weights).reduce((sum, w) => sum + w, 0);
 
     const score=
 
