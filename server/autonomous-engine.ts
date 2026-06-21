@@ -56,6 +56,7 @@ import { evaluateExecutionIntelligence } from "./execution-intelligence";
 import { evaluateTradeQuality } from "./trade-quality-engine";
 import { evaluateAthenaConfidence } from "./athena-confidence-engine";
 import { evaluateExpectedValue } from "./expected-value-engine";
+import { evaluateAthenaNeuralScore } from "./athena-neural-score";
 import {
   newsGuard,
   checkFvgRetest,
@@ -2205,6 +2206,19 @@ const ev = evaluateExpectedValue({
 
 });
 
+const neural = evaluateAthenaNeuralScore({
+  qualityScore: athenaQuality.score,
+  confidenceScore: athenaConfidence.score,
+  expectedValueR: ev.expectedValue,
+  metaScore: metaApproval.metaScore,
+  executionScore: executionDecision.score ?? 75,
+  safetyScore: Math.max(0, 100 - safety.dangerScore),
+  portfolioScore: Math.max(
+    0,
+    100 - portfolioCheck.projectedHeatPct * 20
+  ),
+});
+
 if (!athenaConfidence.approved) {
   this.log(
     `🧠 ATHENA CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
@@ -2275,6 +2289,28 @@ if (!ev.approved) {
     return;
 }
 
+if (!neural.approved) {
+    this.log(
+        `🧠 NEURAL BLOCK: ${pairStat.instrument} ${finalAction} — ${neural.reason}`
+    );
+
+    await decisionJournal.record({
+        type: "BLOCKED",
+        stage: "EXECUTION",
+        instrument: pairStat.instrument,
+        direction: finalAction,
+        confidence: finalConfidence,
+        metaScore: metaApproval.metaScore,
+        riskPct: effectiveRiskPct,
+        strategy: metaStrategy,
+        regime: metaRegime,
+        reason: neural.reason,
+        extra: { neural }
+    });
+
+    return;
+}
+
   await decisionJournal.record({
     type: "BLOCKED",
     stage: "EXECUTION",
@@ -2287,12 +2323,15 @@ if (!ev.approved) {
     regime: metaRegime,
     reason: `Athena quality block: ${athenaQuality.reason}`,
     extra: {
-      athenaQuality,
-      executionDecision,
-      portfolioCheck,
-      dynamicRisk,
-      currentDrawdownPct,
-    },
+    athenaConfidence,
+    athenaQuality,
+    ev,
+    neural,
+    executionDecision,
+    portfolioCheck,
+    dynamicRisk,
+    currentDrawdownPct,
+},
   });
 
   return;
@@ -2345,10 +2384,12 @@ await decisionJournal.record({
     stopLoss: sl,
     takeProfit: tp,
     portfolioHeat: portfolioCheck.projectedHeatPct,
-athenaConfidence,
-athenaQuality,
-executionDecision,
-  },
+    athenaConfidence,
+    athenaQuality,
+    ev,
+    neural,
+    executionDecision,
+},
 });
 
 pairStat.lastTrade = Date.now();
