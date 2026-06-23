@@ -162,6 +162,14 @@ export interface OpenTrade {
 
     metaScore?: number;
 
+  athenaQualityScore?: number;
+
+  athenaConfidenceScore?: number;
+
+  athenaNeuralScore?: number;
+
+  athenaEV?: number;
+
   };
 
 }
@@ -2449,6 +2457,10 @@ this.openTradeSnapshots.set(tradeId, {
     strategy: stratSignal.strategy,
     confidence: finalConfidence,
     metaScore: metaApproval.metaScore,
+athenaQualityScore: athenaQuality.score,
+athenaConfidenceScore: athenaConfidence.score,
+athenaNeuralScore: neural.score,
+athenaEV: ev.expectedValue,
   },
 });
 
@@ -2557,6 +2569,10 @@ learningEngine.recordTrade({
   regime: snapSignal.regime ?? "UNKNOWN",
   strategy: snapSignal.strategy ?? "UNKNOWN",
   confidence: snapSignal.confidence ?? 0,
+athenaQualityScore: snapSignal.athenaQualityScore,
+athenaConfidenceScore: snapSignal.athenaConfidenceScore,
+athenaNeuralScore: snapSignal.athenaNeuralScore,
+athenaEV: snapSignal.athenaEV,
 });
 
 marketMemory.record({
