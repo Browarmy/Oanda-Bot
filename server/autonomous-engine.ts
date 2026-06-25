@@ -57,6 +57,7 @@ import { evaluateTradeQuality } from "./trade-quality-engine";
 import { evaluateAthenaConfidence } from "./athena-confidence-engine";
 import { evaluateExpectedValue } from "./expected-value-engine";
 import { evaluateAthenaNeuralScore } from "./athena-neural-score";
+import { evaluatePortfolioCio } from "./portfolio-cio";
 import {
   newsGuard,
   checkFvgRetest,
