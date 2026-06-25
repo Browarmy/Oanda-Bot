@@ -53,6 +53,10 @@ import { evaluatePortfolioCandidate } from "./ai-portfolio-manager";
 import { calculateAdaptiveConfidenceThreshold } from "./adaptive-confidence";
 import { evaluateSafetyGovernor } from "./safety-governor";
 import { evaluateExecutionIntelligence } from "./execution-intelligence";
+import { evaluateTradeQuality } from "./trade-quality-engine";
+import { evaluateAthenaConfidence } from "./athena-confidence-engine";
+import { evaluateExpectedValue } from "./expected-value-engine";
+import { evaluateAthenaNeuralScore } from "./athena-neural-score";
 import {
   newsGuard,
   checkFvgRetest,
@@ -157,6 +161,14 @@ export interface OpenTrade {
     confidence?: number;
 
     metaScore?: number;
+
+  athenaQualityScore?: number;
+
+  athenaConfidenceScore?: number;
+
+  athenaNeuralScore?: number;
+
+  athenaEV?: number;
 
   };
 
@@ -2135,6 +2147,232 @@ if (executionDecision.action === "WAIT") {
 
 this.log(`⚡ EXECUTION OK: ${executionDecision.reason}`);
 
+// ── ATHENA AI v5 — TRADE QUALITY ENGINE ───────────────────────────────────
+const spreadScore = Math.max(
+  0,
+  Math.min(1, 1 - spreadPips / this.state.config.maxSpreadPips)
+);
+
+const athenaConfidence = evaluateAthenaConfidence({
+  pairScore: thresholdPairLearning?.score,
+  strategyScore: metaApproval.components.strategyScore,
+  regimeScore: metaApproval.components.regimeScore,
+  memoryScore: memoryCheck.similar?.score,
+  confidenceCalibration:
+    thresholdConfidenceCalibration?.calibratedScore,
+  trendScore: regime.trendScore,
+  volatilityScore: 1 - regime.volatilityScore,
+  spreadScore,
+  portfolioScore: Math.max(
+    0,
+    Math.min(1, 1 - (portfolioCheck.projectedHeatPct ?? 0) / 4)
+  ),
+  riskScore: Math.max(
+    0,
+    Math.min(1, 1 - (currentDrawdownPct ?? 0) / 5)
+  ),
+  executionScore: executionDecision.score
+    ? executionDecision.score / 100
+    : 0.75,
+});
+const athenaQuality = evaluateTradeQuality({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  confidence: Math.max(finalConfidence, athenaConfidence.confidence),
+
+  pairScore: thresholdPairLearning?.score,
+  strategyScore: metaApproval.components.strategyScore,
+  regimeScore: metaApproval.components.regimeScore,
+  memoryScore: memoryCheck.similar?.score,
+  portfolioScore: Math.max(
+    0,
+    Math.min(1, 1 - (portfolioCheck.projectedHeatPct ?? 0) / 4)
+  ),
+  riskScore: Math.max(
+    0,
+    Math.min(1, 1 - (currentDrawdownPct ?? 0) / 5)
+  ),
+
+  spreadPips,
+  maxSpreadPips: this.state.config.maxSpreadPips,
+});
+
+const ev = evaluateExpectedValue({
+
+    confidence: athenaConfidence.confidence,
+
+    expectedWinRate:
+        thresholdPairLearning?.winRate ?? 0.55,
+
+    averageWinR:
+        thresholdPairLearning?.averageWinR ?? 2.0,
+
+    averageLossR:
+        thresholdPairLearning?.averageLossR ?? 1.0,
+
+});
+
+const neural = evaluateAthenaNeuralScore({
+  qualityScore: athenaQuality.score,
+  confidenceScore: athenaConfidence.score,
+  expectedValueR: ev.expectedValue,
+  metaScore: metaApproval.metaScore,
+  executionScore: executionDecision.score ?? 75,
+  safetyScore: Math.max(0, 100 - safety.dangerScore),
+  portfolioScore: Math.max(
+    0,
+    100 - portfolioCheck.projectedHeatPct * 20
+  ),
+});
+
+if (!athenaConfidence.approved) {
+  this.log(
+    `🧠 ATHENA CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${athenaConfidence.grade} ${athenaConfidence.score}/100 | ` +
+    `Edge ${athenaConfidence.expectedEdgeR.toFixed(2)}R`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: athenaConfidence.confidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Athena confidence block: ${athenaConfidence.grade} ${athenaConfidence.score}/100`,
+    extra: {
+      athenaConfidence,
+      reasons: athenaConfidence.reasons,
+    },
+  });
+
+  return;
+}
+
+if (!athenaQuality.approved) {
+  this.log(
+    `🧠 ATHENA BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    athenaQuality.reason
+  );
+
+if (!ev.approved) {
+
+    this.log(
+        `📈 EV BLOCK: ${pairStat.instrument} ${finalAction} — ${ev.reason}`
+    );
+
+    await decisionJournal.record({
+
+        type: "BLOCKED",
+
+        stage: "EXECUTION",
+
+        instrument: pairStat.instrument,
+
+        direction: finalAction,
+
+        confidence: finalConfidence,
+
+        metaScore: metaApproval.metaScore,
+
+        riskPct: effectiveRiskPct,
+
+        strategy: metaStrategy,
+
+        regime: metaRegime,
+
+        reason: ev.reason,
+
+        extra: {
+            ev
+        }
+
+    });
+
+    return;
+}
+
+if (!neural.approved) {
+    this.log(
+        `🧠 NEURAL BLOCK: ${pairStat.instrument} ${finalAction} — ${neural.reason}`
+    );
+
+    await decisionJournal.record({
+        type: "BLOCKED",
+        stage: "EXECUTION",
+        instrument: pairStat.instrument,
+        direction: finalAction,
+        confidence: finalConfidence,
+        metaScore: metaApproval.metaScore,
+        riskPct: effectiveRiskPct,
+        strategy: metaStrategy,
+        regime: metaRegime,
+        reason: neural.reason,
+        extra: { neural }
+    });
+
+    return;
+}
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Athena quality block: ${athenaQuality.reason}`,
+    extra: {
+    athenaConfidence,
+    athenaQuality,
+    ev,
+    neural,
+    executionDecision,
+    portfolioCheck,
+    dynamicRisk,
+    currentDrawdownPct,
+},
+  });
+
+  return;
+}
+
+this.log(
+    `🧠 ATHENA APPROVED: ${pairStat.instrument} ${finalAction} | ` +
+    `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
+    `Conf ${athenaConfidence.score}/100 | ` +
+    `EV ${ev.expectedValue.toFixed(2)}R`
+);
+
+await decisionJournal.record({
+  type: "APPROVED",
+  stage: "EXECUTION",
+  instrument: pairStat.instrument,
+  direction: finalAction,
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+  riskPct: effectiveRiskPct,
+  strategy: metaStrategy,
+  regime: metaRegime,
+  reason: `Athena approved: ${athenaQuality.reason}`,
+extra: {
+    athenaConfidence,
+    athenaQuality,
+    executionDecision,
+    portfolioCheck,
+    dynamicRisk,
+    currentDrawdownPct,
+},
+});
+
 const tradeId = await this.api.placeTrade(pairStat.instrument, units, finalAction, sl, tp);
 await decisionJournal.record({
   type: "EXECUTED",
@@ -2154,7 +2392,12 @@ await decisionJournal.record({
     stopLoss: sl,
     takeProfit: tp,
     portfolioHeat: portfolioCheck.projectedHeatPct,
-  },
+    athenaConfidence,
+    athenaQuality,
+    ev,
+    neural,
+    executionDecision,
+},
 });
 
 pairStat.lastTrade = Date.now();
@@ -2214,6 +2457,10 @@ this.openTradeSnapshots.set(tradeId, {
     strategy: stratSignal.strategy,
     confidence: finalConfidence,
     metaScore: metaApproval.metaScore,
+athenaQualityScore: athenaQuality.score,
+athenaConfidenceScore: athenaConfidence.score,
+athenaNeuralScore: neural.score,
+athenaEV: ev.expectedValue,
   },
 });
 
@@ -2322,6 +2569,10 @@ learningEngine.recordTrade({
   regime: snapSignal.regime ?? "UNKNOWN",
   strategy: snapSignal.strategy ?? "UNKNOWN",
   confidence: snapSignal.confidence ?? 0,
+athenaQualityScore: snapSignal.athenaQualityScore,
+athenaConfidenceScore: snapSignal.athenaConfidenceScore,
+athenaNeuralScore: snapSignal.athenaNeuralScore,
+athenaEV: snapSignal.athenaEV,
 });
 
 marketMemory.record({

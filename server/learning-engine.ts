@@ -77,8 +77,13 @@ export interface TradePattern {
   strategy?: string;
   regime?: string;
   instrument?: string;
-  confidence?: number;
+    confidence?: number;
   confidenceBucket?: string;
+
+  athenaQualityScore?: number;
+  athenaConfidenceScore?: number;
+  athenaNeuralScore?: number;
+  athenaEV?: number;
 }
 
 export interface StrategyLearning {
@@ -414,6 +419,10 @@ closedAt: number;
 strategy?: string;
 regime?: string;
 confidence?: number;
+athenaQualityScore?: number;
+athenaConfidenceScore?: number;
+athenaNeuralScore?: number;
+athenaEV?: number;
     }) {
     // Prevent historical OANDA backfill from re-teaching the AI every restart.
     // Backfill should seed learning only when the learning DB is empty.
@@ -644,12 +653,37 @@ this.state.patterns.push({
   strategy: trade.strategy ?? "UNKNOWN",
   regime: trade.regime ?? "UNKNOWN",
   instrument: trade.instrument,
-  confidence,
+    confidence,
   confidenceBucket: confidenceBucketName,
+
+  athenaQualityScore: trade.athenaQualityScore,
+  athenaConfidenceScore: trade.athenaConfidenceScore,
+  athenaNeuralScore: trade.athenaNeuralScore,
+  athenaEV: trade.athenaEV,
 });
     if (this.state.patterns.length > this.MAX_PATTERNS) {
       this.state.patterns.shift();
     }
+
+const athenaPatterns = this.state.patterns.filter(
+  p => typeof p.athenaNeuralScore === "number"
+);
+
+if (athenaPatterns.length >= 10 && athenaPatterns.length % 10 === 0) {
+  const highNeural = athenaPatterns.filter(p => (p.athenaNeuralScore ?? 0) >= 80);
+  const highNeuralWins = highNeural.filter(p => p.won).length;
+  const highNeuralWR = highNeural.length > 0 ? highNeuralWins / highNeural.length : 0;
+
+  const avgEV =
+    athenaPatterns.reduce((sum, p) => sum + (p.athenaEV ?? 0), 0) /
+    athenaPatterns.length;
+
+  this.addInsight(
+    `🧠 Athena calibration: ${athenaPatterns.length} scored trades | ` +
+    `80+ Neural WR ${(highNeuralWR * 100).toFixed(0)}% | ` +
+    `Avg EV ${avgEV.toFixed(2)}R`
+  );
+}
 
     this.dirty = true;
 
