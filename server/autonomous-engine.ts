@@ -2227,6 +2227,8 @@ const neural = evaluateAthenaNeuralScore({
   ),
 });
 
+
+
 if (!athenaConfidence.approved) {
   this.log(
     `🧠 ATHENA CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
@@ -2260,64 +2262,7 @@ if (!athenaQuality.approved) {
     athenaQuality.reason
   );
 
-if (!ev.approved) {
 
-    this.log(
-        `📈 EV BLOCK: ${pairStat.instrument} ${finalAction} — ${ev.reason}`
-    );
-
-    await decisionJournal.record({
-
-        type: "BLOCKED",
-
-        stage: "EXECUTION",
-
-        instrument: pairStat.instrument,
-
-        direction: finalAction,
-
-        confidence: finalConfidence,
-
-        metaScore: metaApproval.metaScore,
-
-        riskPct: effectiveRiskPct,
-
-        strategy: metaStrategy,
-
-        regime: metaRegime,
-
-        reason: ev.reason,
-
-        extra: {
-            ev
-        }
-
-    });
-
-    return;
-}
-
-if (!neural.approved) {
-    this.log(
-        `🧠 NEURAL BLOCK: ${pairStat.instrument} ${finalAction} — ${neural.reason}`
-    );
-
-    await decisionJournal.record({
-        type: "BLOCKED",
-        stage: "EXECUTION",
-        instrument: pairStat.instrument,
-        direction: finalAction,
-        confidence: finalConfidence,
-        metaScore: metaApproval.metaScore,
-        riskPct: effectiveRiskPct,
-        strategy: metaStrategy,
-        regime: metaRegime,
-        reason: neural.reason,
-        extra: { neural }
-    });
-
-    return;
-}
 
   await decisionJournal.record({
     type: "BLOCKED",
@@ -2345,6 +2290,50 @@ if (!neural.approved) {
   return;
 }
 
+if (!ev.approved) {
+  this.log(
+    `📈 EV BLOCK: ${pairStat.instrument} ${finalAction} — ${ev.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: ev.reason,
+    extra: { ev },
+  });
+
+  return;
+}
+
+if (!neural.approved) {
+  this.log(
+    `🧠 NEURAL BLOCK: ${pairStat.instrument} ${finalAction} — ${neural.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: neural.reason,
+    extra: { neural },
+  });
+
+  return;
+}
+
 this.log(
     `🧠 ATHENA APPROVED: ${pairStat.instrument} ${finalAction} | ` +
     `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
@@ -2366,6 +2355,8 @@ await decisionJournal.record({
 extra: {
     athenaConfidence,
     athenaQuality,
+    ev,
+    neural,
     executionDecision,
     portfolioCheck,
     dynamicRisk,
