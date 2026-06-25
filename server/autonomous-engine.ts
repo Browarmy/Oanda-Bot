@@ -1927,6 +1927,64 @@ await decisionJournal.record({
   },
 });
 
+// ── ATHENA CIO — PORTFOLIO COMMAND LAYER ───────────────────────────────────
+const portfolioCio = evaluatePortfolioCio({
+  accountBalance: this.state.accountBalance,
+  accountEquity: this.state.accountEquity,
+  dailyStartBalance: this.dailyStartBalance,
+  openTradesCount: openTrades.length,
+  maxConcurrentTrades: this.state.config.maxConcurrentTrades,
+  currentDrawdownPct,
+  portfolioHeatPct: this.portfolioHeat,
+  recentTrades: this.state.tradeHistory.slice(-50).map(t => ({
+    pnl: t.pnl,
+    won: t.won,
+    closedAt: t.closedAt,
+  })),
+});
+
+if (!portfolioCio.approved) {
+  this.log(
+    `🏛️ CIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${portfolioCio.mood} ${portfolioCio.score}/100 | ${portfolioCio.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "PORTFOLIO",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Athena CIO block: ${portfolioCio.reason}`,
+    extra: { portfolioCio },
+  });
+
+  return;
+}
+
+if (portfolioCio.riskMultiplier !== 1) {
+  const beforeCioRisk = effectiveRiskPct;
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * portfolioCio.riskMultiplier
+  );
+
+  this.log(
+    `🏛️ CIO RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeCioRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    `${portfolioCio.mood} ${portfolioCio.score}/100 | ${portfolioCio.reason}`
+  );
+} else {
+  this.log(
+    `🏛️ CIO OK: ${pairStat.instrument} ${finalAction} — ` +
+    `${portfolioCio.mood} ${portfolioCio.score}/100 | ${portfolioCio.reason}`
+  );
+}
+
 // ── SAFETY GOVERNOR V1 ─────────────────────────────────────────────────────
 const safetyRecentTrades = this.state.tradeHistory.slice(-20);
 
@@ -2360,6 +2418,7 @@ extra: {
     neural,
     executionDecision,
     portfolioCheck,
+    portfolioCio,
     dynamicRisk,
     currentDrawdownPct,
 },
@@ -2384,6 +2443,7 @@ await decisionJournal.record({
     stopLoss: sl,
     takeProfit: tp,
     portfolioHeat: portfolioCheck.projectedHeatPct,
+    portfolioCio,
     athenaConfidence,
     athenaQuality,
     ev,
