@@ -58,7 +58,6 @@ import { evaluateAthenaConfidence } from "./athena-confidence-engine";
 import { evaluateExpectedValue } from "./expected-value-engine";
 import { evaluateAthenaNeuralScore } from "./athena-neural-score";
 import { evaluatePortfolioCio } from "./portfolio-cio";
-import { forecastMarketState } from "./market-forecast-engine";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1863,6 +1862,59 @@ await decisionJournal.record({
   );
 }
 
+// ── ATHENA MARKET FORECAST ENGINE ───────────────────────────────────────
+const marketForecast = forecastMarketState({
+  regime: regime.regime,
+  regimeConfidence: regime.regimeConfidence,
+  trendScore: regime.trendScore,
+  rangeScore: regime.rangeScore,
+  breakoutScore: regime.breakoutScore,
+  volatilityScore: regime.volatilityScore,
+  riskMood: regime.riskMood,
+});
+
+if (!marketForecast.approved) {
+  this.log(
+    `🔮 FORECAST BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${marketForecast.forecast} ${marketForecast.score}/100 | ${marketForecast.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "SIGNAL",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Forecast block: ${marketForecast.reason}`,
+    extra: { marketForecast },
+  });
+
+  return;
+}
+
+const beforeForecastConfidence = finalConfidence;
+
+finalConfidence = Math.max(
+  0,
+  Math.min(
+    0.99,
+    finalConfidence + marketForecast.confidenceAdjustment
+  )
+);
+
+effectiveRiskPct *= marketForecast.riskMultiplier;
+
+this.log(
+  `🔮 FORECAST: ${pairStat.instrument} ${finalAction} | ` +
+  `${marketForecast.forecast} ${marketForecast.score}/100 | ` +
+  `${(beforeForecastConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+  `${marketForecast.reason}`
+);
+
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
 const equityPeak = Math.max(
   ...(this.state.equityCurve ?? []).map(e => e.equity),
@@ -2420,6 +2472,7 @@ extra: {
     executionDecision,
     portfolioCheck,
     portfolioCio,
+    marketForecast,
     dynamicRisk,
     currentDrawdownPct,
 },
@@ -2445,6 +2498,7 @@ await decisionJournal.record({
     takeProfit: tp,
     portfolioHeat: portfolioCheck.projectedHeatPct,
     portfolioCio,
+    marketForecast,
     athenaConfidence,
     athenaQuality,
     ev,
