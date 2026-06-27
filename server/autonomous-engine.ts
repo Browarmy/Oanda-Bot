@@ -57,6 +57,10 @@ import { evaluateTradeQuality } from "./trade-quality-engine";
 import { evaluateAthenaConfidence } from "./athena-confidence-engine";
 import { evaluateExpectedValue } from "./expected-value-engine";
 import { evaluateAthenaNeuralScore } from "./athena-neural-score";
+import { evaluatePortfolioCio } from "./portfolio-cio";
+import { forecastMarketState } from "./athena-market-forecast";
+import { evaluateStrategyRotation } from "./strategy-rotation-engine";
+import { evaluateAthenaExecutiveBrain } from "./athena-executive-brain";
 import {
   newsGuard,
   checkFvgRetest,
@@ -1861,6 +1865,112 @@ await decisionJournal.record({
   );
 }
 
+// ── ATHENA MARKET FORECAST ENGINE ───────────────────────────────────────
+const marketForecast = forecastMarketState({
+  regime: regime.regime,
+  regimeConfidence: regime.regimeConfidence,
+  trendScore: regime.trendScore,
+  rangeScore: regime.rangeScore,
+  breakoutScore: regime.breakoutScore,
+  volatilityScore: regime.volatilityScore,
+  riskMood: regime.riskMood,
+});
+
+if (!marketForecast.approved) {
+  this.log(
+    `🔮 FORECAST BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${marketForecast.forecast} ${marketForecast.score}/100 | ${marketForecast.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "SIGNAL",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Forecast block: ${marketForecast.reason}`,
+    extra: { marketForecast },
+  });
+
+  return;
+}
+
+const beforeForecastConfidence = finalConfidence;
+
+finalConfidence = Math.max(
+  0,
+  Math.min(
+    0.99,
+    finalConfidence + marketForecast.confidenceAdjustment
+  )
+);
+
+effectiveRiskPct *= marketForecast.riskMultiplier;
+
+this.log(
+  `🔮 FORECAST: ${pairStat.instrument} ${finalAction} | ` +
+  `${marketForecast.forecast} ${marketForecast.score}/100 | ` +
+  `${(beforeForecastConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+  `${marketForecast.reason}`
+);
+
+// ── ATHENA STRATEGY ROTATION ENGINE ──────────────────────────────────────
+const strategyRotation = evaluateStrategyRotation({
+  strategy: metaStrategy,
+  recentTrades: this.state.tradeHistory.map(t => ({
+    strategy: t.strategy,
+    pnl: t.pnl,
+    won: t.won,
+    closedAt: t.closedAt,
+  })),
+});
+
+if (!strategyRotation.approved) {
+  this.log(
+    `🔄 STRATEGY BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${strategyRotation.score}/100 | ${strategyRotation.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "SIGNAL",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Strategy rotation block: ${strategyRotation.reason}`,
+    extra: { strategyRotation },
+  });
+
+  return;
+}
+
+const beforeRotationConfidence = finalConfidence;
+
+finalConfidence = Math.max(
+  0,
+  Math.min(
+    0.99,
+    finalConfidence + strategyRotation.confidenceAdjustment
+  )
+);
+
+effectiveRiskPct *= strategyRotation.riskMultiplier;
+
+this.log(
+  `🔄 STRATEGY ROTATION: ${pairStat.instrument} ${finalAction} | ` +
+  `${strategyRotation.score}/100 | ` +
+  `${(beforeRotationConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+  `${strategyRotation.reason}`
+);
+
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
 const equityPeak = Math.max(
   ...(this.state.equityCurve ?? []).map(e => e.equity),
@@ -1925,6 +2035,64 @@ await decisionJournal.record({
     currentDrawdownPct,
   },
 });
+
+// ── ATHENA CIO — PORTFOLIO COMMAND LAYER ───────────────────────────────────
+const portfolioCio = evaluatePortfolioCio({
+  accountBalance: this.state.accountBalance,
+  accountEquity: this.state.accountEquity,
+  dailyStartBalance: this.dailyStartBalance,
+  openTradesCount: openTrades.length,
+  maxConcurrentTrades: this.state.config.maxConcurrentTrades,
+  currentDrawdownPct,
+  portfolioHeatPct: this.portfolioHeat,
+  recentTrades: this.state.tradeHistory.slice(-50).map(t => ({
+    pnl: t.pnl,
+    won: t.won,
+    closedAt: t.closedAt,
+  })),
+});
+
+if (!portfolioCio.approved) {
+  this.log(
+    `🏛️ CIO BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${portfolioCio.mood} ${portfolioCio.score}/100 | ${portfolioCio.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "PORTFOLIO",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Athena CIO block: ${portfolioCio.reason}`,
+    extra: { portfolioCio },
+  });
+
+  return;
+}
+
+if (portfolioCio.riskMultiplier !== 1) {
+  const beforeCioRisk = effectiveRiskPct;
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * portfolioCio.riskMultiplier
+  );
+
+  this.log(
+    `🏛️ CIO RISK: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeCioRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+    `${portfolioCio.mood} ${portfolioCio.score}/100 | ${portfolioCio.reason}`
+  );
+} else {
+  this.log(
+    `🏛️ CIO OK: ${pairStat.instrument} ${finalAction} — ` +
+    `${portfolioCio.mood} ${portfolioCio.score}/100 | ${portfolioCio.reason}`
+  );
+}
 
 // ── SAFETY GOVERNOR V1 ─────────────────────────────────────────────────────
 const safetyRecentTrades = this.state.tradeHistory.slice(-20);
@@ -2334,6 +2502,56 @@ if (!neural.approved) {
   return;
 }
 
+// ── ATHENA EXECUTIVE BRAIN ────────────────────────────────────────────────
+const executive = evaluateAthenaExecutiveBrain({
+  confidence: finalConfidence,
+  metaScore: metaApproval.metaScore,
+
+  athenaQualityScore: athenaQuality.score,
+  athenaConfidenceScore: athenaConfidence.score,
+  neuralScore: neural.score,
+  expectedValueR: ev.expectedValue,
+
+  cioScore: portfolioCio.score,
+  forecastScore: marketForecast.score,
+  strategyRotationScore: strategyRotation.score,
+  executionScore: executionDecision.score ?? 75,
+  safetyDangerScore: safety.dangerScore,
+});
+
+if (!executive.approved) {
+  this.log(
+    `👑 EXECUTIVE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${executive.grade} ${executive.score.toFixed(0)}/100 | ${executive.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "EXECUTION",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: executive.reason,
+    extra: { executive },
+  });
+
+  return;
+}
+
+const beforeExecutiveRisk = effectiveRiskPct;
+
+effectiveRiskPct *= executive.riskMultiplier;
+
+this.log(
+  `👑 EXECUTIVE APPROVED: ${pairStat.instrument} ${finalAction} | ` +
+  `${executive.grade} ${executive.score.toFixed(0)}/100 | ` +
+  `${beforeExecutiveRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}%`
+);
+
 this.log(
     `🧠 ATHENA APPROVED: ${pairStat.instrument} ${finalAction} | ` +
     `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
@@ -2355,10 +2573,14 @@ await decisionJournal.record({
 extra: {
     athenaConfidence,
     athenaQuality,
+    executive,
     ev,
     neural,
     executionDecision,
     portfolioCheck,
+    portfolioCio,
+    marketForecast,
+    strategyRotation,
     dynamicRisk,
     currentDrawdownPct,
 },
@@ -2383,6 +2605,10 @@ await decisionJournal.record({
     stopLoss: sl,
     takeProfit: tp,
     portfolioHeat: portfolioCheck.projectedHeatPct,
+    portfolioCio,
+    marketForecast,
+    strategyRotation,
+    executive,
     athenaConfidence,
     athenaQuality,
     ev,
