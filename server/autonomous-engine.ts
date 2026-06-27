@@ -59,6 +59,7 @@ import { evaluateExpectedValue } from "./expected-value-engine";
 import { evaluateAthenaNeuralScore } from "./athena-neural-score";
 import { evaluatePortfolioCio } from "./portfolio-cio";
 import { evaluateStrategyRotation } from "./strategy-rotation-engine";
+import { evaluateAthenaExecutiveBrain } from "./athena-executive-brain";
 import {
   newsGuard,
   checkFvgRetest,
