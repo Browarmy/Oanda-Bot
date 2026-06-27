@@ -1916,6 +1916,59 @@ this.log(
   `${marketForecast.reason}`
 );
 
+// ── ATHENA STRATEGY ROTATION ENGINE ──────────────────────────────────────
+const strategyRotation = evaluateStrategyRotation({
+  strategy: metaStrategy,
+  recentTrades: this.state.tradeHistory.map(t => ({
+    strategy: t.strategy,
+    pnl: t.pnl,
+    won: t.won,
+    closedAt: t.closedAt,
+  })),
+});
+
+if (!strategyRotation.approved) {
+  this.log(
+    `🔄 STRATEGY BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `${strategyRotation.score}/100 | ${strategyRotation.reason}`
+  );
+
+  await decisionJournal.record({
+    type: "BLOCKED",
+    stage: "SIGNAL",
+    instrument: pairStat.instrument,
+    direction: finalAction,
+    confidence: finalConfidence,
+    metaScore: metaApproval.metaScore,
+    riskPct: effectiveRiskPct,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    reason: `Strategy rotation block: ${strategyRotation.reason}`,
+    extra: { strategyRotation },
+  });
+
+  return;
+}
+
+const beforeRotationConfidence = finalConfidence;
+
+finalConfidence = Math.max(
+  0,
+  Math.min(
+    0.99,
+    finalConfidence + strategyRotation.confidenceAdjustment
+  )
+);
+
+effectiveRiskPct *= strategyRotation.riskMultiplier;
+
+this.log(
+  `🔄 STRATEGY ROTATION: ${pairStat.instrument} ${finalAction} | ` +
+  `${strategyRotation.score}/100 | ` +
+  `${(beforeRotationConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+  `${strategyRotation.reason}`
+);
+
 // ── DYNAMIC RISK ALLOCATOR V1 ──────────────────────────────────────────────
 const equityPeak = Math.max(
   ...(this.state.equityCurve ?? []).map(e => e.equity),
@@ -2474,6 +2527,7 @@ extra: {
     portfolioCheck,
     portfolioCio,
     marketForecast,
+    strategyRotation,
     dynamicRisk,
     currentDrawdownPct,
 },
@@ -2500,6 +2554,7 @@ await decisionJournal.record({
     portfolioHeat: portfolioCheck.projectedHeatPct,
     portfolioCio,
     marketForecast,
+    strategyRotation,
     athenaConfidence,
     athenaQuality,
     ev,
