@@ -1865,7 +1865,7 @@ await decisionJournal.record({
   );
 }
 
-// ── ATHENA MARKET FORECAST ENGINE ───────────────────────────────────────
+// ── DREVANTIS MARKET FORECAST ENGINE ───────────────────────────────────────
 const marketForecast = forecastMarketState({
   regime: regime.regime,
   regimeConfidence: regime.regimeConfidence,
@@ -1918,7 +1918,7 @@ this.log(
   `${marketForecast.reason}`
 );
 
-// ── ATHENA STRATEGY ROTATION ENGINE ──────────────────────────────────────
+// ── DREVANTIS STRATEGY ROTATION ENGINE ──────────────────────────────────────
 const strategyRotation = evaluateStrategyRotation({
   strategy: metaStrategy,
   recentTrades: this.state.tradeHistory.map(t => ({
@@ -2036,7 +2036,7 @@ await decisionJournal.record({
   },
 });
 
-// ── ATHENA CIO — PORTFOLIO COMMAND LAYER ───────────────────────────────────
+// ── DREVANTIS CIO — PORTFOLIO COMMAND LAYER ───────────────────────────────────
 const portfolioCio = evaluatePortfolioCio({
   accountBalance: this.state.accountBalance,
   accountEquity: this.state.accountEquity,
@@ -2068,7 +2068,7 @@ if (!portfolioCio.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Athena CIO block: ${portfolioCio.reason}`,
+    reason: `Drevantis CIO block: ${portfolioCio.reason}`,
     extra: { portfolioCio },
   });
 
@@ -2315,7 +2315,7 @@ if (executionDecision.action === "WAIT") {
 
 this.log(`⚡ EXECUTION OK: ${executionDecision.reason}`);
 
-// ── ATHENA AI v5 — TRADE QUALITY ENGINE ───────────────────────────────────
+// ── DREVANTIS AI v5 — TRADE QUALITY ENGINE ───────────────────────────────────
 const spreadScore = Math.max(
   0,
   Math.min(1, 1 - spreadPips / this.state.config.maxSpreadPips)
@@ -2399,7 +2399,7 @@ const neural = evaluateAthenaNeuralScore({
 
 if (!athenaConfidence.approved) {
   this.log(
-    `🧠 ATHENA CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `🧠 DREVANTIS CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     `${athenaConfidence.grade} ${athenaConfidence.score}/100 | ` +
     `Edge ${athenaConfidence.expectedEdgeR.toFixed(2)}R`
   );
@@ -2414,7 +2414,7 @@ if (!athenaConfidence.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Athena confidence block: ${athenaConfidence.grade} ${athenaConfidence.score}/100`,
+    reason: `Drevantis confidence block: ${athenaConfidence.grade} ${athenaConfidence.score}/100`,
     extra: {
       athenaConfidence,
       reasons: athenaConfidence.reasons,
@@ -2426,7 +2426,7 @@ if (!athenaConfidence.approved) {
 
 if (!athenaQuality.approved) {
   this.log(
-    `🧠 ATHENA BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `🧠 DREVANTIS BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     athenaQuality.reason
   );
 
@@ -2442,7 +2442,7 @@ if (!athenaQuality.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Athena quality block: ${athenaQuality.reason}`,
+    reason: `Drevantis quality block: ${athenaQuality.reason}`,
     extra: {
     athenaConfidence,
     athenaQuality,
@@ -2502,7 +2502,7 @@ if (!neural.approved) {
   return;
 }
 
-// ── ATHENA EXECUTIVE BRAIN ────────────────────────────────────────────────
+// ── DREVANTIS EXECUTIVE BRAIN ────────────────────────────────────────────────
 const executive = evaluateAthenaExecutiveBrain({
   confidence: finalConfidence,
   metaScore: metaApproval.metaScore,
@@ -2553,7 +2553,7 @@ this.log(
 );
 
 this.log(
-    `🧠 ATHENA APPROVED: ${pairStat.instrument} ${finalAction} | ` +
+    `🧠 DREVANTIS APPROVED: ${pairStat.instrument} ${finalAction} | ` +
     `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
     `Conf ${athenaConfidence.score}/100 | ` +
     `EV ${ev.expectedValue.toFixed(2)}R`
@@ -2569,7 +2569,7 @@ await decisionJournal.record({
   riskPct: effectiveRiskPct,
   strategy: metaStrategy,
   regime: metaRegime,
-  reason: `Athena approved: ${athenaQuality.reason}`,
+  reason: `Drevantis approved: ${athenaQuality.reason}`,
 extra: {
     athenaConfidence,
     athenaQuality,
