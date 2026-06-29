@@ -366,7 +366,7 @@ const dailyProfitFactor =
             <Zap className="w-5 h-5" style={{ color: C.bg }} />
           </div>
           <div>
-            <p className="text-sm font-black tracking-wide" style={{ color: C.amber }}>OANDA BOT</p>
+            <p className="text-sm font-black tracking-wide" style={{ color: C.amber }}>Drevantis</p>
             <p className="text-xs font-mono" style={{ color: C.muted }}>
               {credentials.accountId.slice(-8)} · {env.toUpperCase()}
             </p>
