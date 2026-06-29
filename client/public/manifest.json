@@ -1,6 +1,6 @@
 {
-  "name": "OANDA Autotrader Bot",
-  "short_name": "OANDA Bot",
+  "name": "Drevantis",
+  "short_name": "Drevantis",
   "description": "Real-time algorithmic trading bot with mathematical optimization",
   "start_url": "/",
   "scope": "/",
