@@ -679,7 +679,7 @@ if (athenaPatterns.length >= 10 && athenaPatterns.length % 10 === 0) {
     athenaPatterns.length;
 
   this.addInsight(
-    `🧠 Athena calibration: ${athenaPatterns.length} scored trades | ` +
+`🧠 Nereqo calibration: ${athenaPatterns.length} scored trades | ` +
     `80+ Neural WR ${(highNeuralWR * 100).toFixed(0)}% | ` +
     `Avg EV ${avgEV.toFixed(2)}R`
   );
