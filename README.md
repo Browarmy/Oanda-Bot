@@ -1,10 +1,10 @@
-# Drevantis
+# Nereqo
 
 > Autonomous Investment Intelligence Platform
 
-Drevantis is an institutional-grade autonomous investment intelligence platform designed to analyse financial markets, evaluate risk, and execute disciplined trading decisions through multiple independent AI decision engines.
+Nereqo is an institutional-grade autonomous investment intelligence platform designed to analyse financial markets, evaluate risk, and execute disciplined trading decisions through multiple independent AI decision engines.
 
-Rather than relying on a single strategy, Drevantis combines market structure, regime detection, portfolio management, adaptive risk allocation, execution intelligence, and continuous machine learning into one unified decision system.
+Rather than relying on a single strategy, Nereqo combines market structure, regime detection, portfolio management, adaptive risk allocation, execution intelligence, and continuous machine learning into one unified decision system.
 
 ---
 
@@ -30,7 +30,7 @@ Rather than relying on a single strategy, Drevantis combines market structure, r
 
 ## Philosophy
 
-Drevantis is built around one principle:
+Nereqo is built around one principle:
 
 > **Protect capital first. Compound intelligently second.**
 
