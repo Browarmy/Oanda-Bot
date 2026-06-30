@@ -2068,7 +2068,7 @@ if (!portfolioCio.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Drevantis CIO block: ${portfolioCio.reason}`,
+    reason: `Nereqo CIO block: ${portfolioCio.reason}`,
     extra: { portfolioCio },
   });
 
@@ -2414,7 +2414,7 @@ if (!athenaConfidence.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Drevantis confidence block: ${athenaConfidence.grade} ${athenaConfidence.score}/100`,
+    reason: `Nereqo confidence block: ${athenaConfidence.grade} ${athenaConfidence.score}/100`,
     extra: {
       athenaConfidence,
       reasons: athenaConfidence.reasons,
@@ -2442,7 +2442,7 @@ if (!athenaQuality.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Drevantis quality block: ${athenaQuality.reason}`,
+    reason: `Nereqo quality block: ${athenaQuality.reason}`,
     extra: {
     athenaConfidence,
     athenaQuality,
@@ -2569,7 +2569,7 @@ await decisionJournal.record({
   riskPct: effectiveRiskPct,
   strategy: metaStrategy,
   regime: metaRegime,
-  reason: `Drevantis approved: ${athenaQuality.reason}`,
+  reason: `Nereqo approved: ${athenaQuality.reason}`,
 extra: {
     athenaConfidence,
     athenaQuality,
