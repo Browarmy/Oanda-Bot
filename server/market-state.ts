@@ -20,8 +20,12 @@ export interface MarketState {
 
   structureScore: number;
   liquidityScore: number;
-  volumeScore: number;
-  institutionalScore: number;
+  volumeProfileScore: number;
+volumeProfilePosition: string;
+volumeProfilePoc: number;
+volumeProfileValueAreaHigh: number;
+volumeProfileValueAreaLow: number;
+volumeProfileSummary: string;
 
   score: number;
   grade: "A" | "B" | "C" | "D";
