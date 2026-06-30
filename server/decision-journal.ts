@@ -41,7 +41,7 @@ export interface DecisionJournalEntry {
 class DecisionJournal {
   private entries: DecisionJournalEntry[] = [];
   private loaded = false;
-  private readonly maxEntries = 5000;
+  private readonly maxEntries = 50000;
 
   async load() {
     if (this.loaded) return;
