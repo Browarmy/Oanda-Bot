@@ -51,7 +51,7 @@ export async function sendTelegramMessage(text: string): Promise<boolean> {
 
 export async function sendTelegramTestMessage() {
   const sent = await sendTelegramMessage(
-    "✅ Telegram connected successfully — Drevantis alerts are active."
+"✅ Telegram connected successfully — Nereqo alerts are active."
   );
 
   if (!sent) {
