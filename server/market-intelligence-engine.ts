@@ -1,4 +1,5 @@
 import type { MarketDirection, MarketState } from "./market-state";
+import { analyseVolumeProfile } from "./volume-profile-engine";
 
 interface CandleLike {
   time: string;
@@ -131,7 +132,15 @@ export function buildMarketState(input: BuildMarketStateInput): MarketState {
   );
 
   const liquidityScore = calcLiquidityScore(input.m15);
-  const volumeScore = calcVolumeScore(input.m15);
+  const volumeProfile = analyseVolumeProfile(
+  input.m15,
+  input.direction === "BUY" ? input.ask : input.bid
+);
+
+const volumeScore = clamp01(
+  calcVolumeScore(input.m15) * 0.45 +
+  volumeProfile.score * 0.55
+);
 
   const institutionalScore = clamp01(
     structureScore * 0.35 +
@@ -182,7 +191,14 @@ export function buildMarketState(input: BuildMarketStateInput): MarketState {
     structureScore,
     liquidityScore,
     volumeScore,
-    institutionalScore,
+institutionalScore,
+
+volumeProfileScore: volumeProfile.score,
+volumeProfilePosition: volumeProfile.position,
+volumeProfilePoc: volumeProfile.poc,
+volumeProfileValueAreaHigh: volumeProfile.valueAreaHigh,
+volumeProfileValueAreaLow: volumeProfile.valueAreaLow,
+volumeProfileSummary: volumeProfile.summary,
 
     score,
     grade: grade(score),
@@ -190,10 +206,11 @@ export function buildMarketState(input: BuildMarketStateInput): MarketState {
     riskMultiplier,
 
     summary:
-      `Market intelligence ${grade(score)} ${score}/100 | ` +
-      `structure ${(structureScore * 100).toFixed(0)}% | ` +
-      `liquidity ${(liquidityScore * 100).toFixed(0)}% | ` +
-      `volume ${(volumeScore * 100).toFixed(0)}% | ` +
-      `institutional ${(institutionalScore * 100).toFixed(0)}%`,
+  `Market intelligence ${grade(score)} ${score}/100 | ` +
+  `structure ${(structureScore * 100).toFixed(0)}% | ` +
+  `liquidity ${(liquidityScore * 100).toFixed(0)}% | ` +
+  `volume ${(volumeScore * 100).toFixed(0)}% | ` +
+  `institutional ${(institutionalScore * 100).toFixed(0)}% | ` +
+  volumeProfile.summary,
   };
 }
