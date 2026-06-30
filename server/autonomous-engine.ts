@@ -61,6 +61,7 @@ import { evaluatePortfolioCio } from "./portfolio-cio";
 import { forecastMarketState } from "./athena-market-forecast";
 import { evaluateStrategyRotation } from "./strategy-rotation-engine";
 import { evaluateAthenaExecutiveBrain } from "./athena-executive-brain";
+import { buildMarketState } from "./market-intelligence-engine";
 import {
   newsGuard,
   checkFvgRetest,
@@ -165,6 +166,10 @@ export interface OpenTrade {
     confidence?: number;
 
     metaScore?: number;
+
+    marketStateScore?: number;
+
+    marketInstitutionalScore?: number;
 
   athenaQualityScore?: number;
 
@@ -1218,9 +1223,55 @@ this.log(
         finalTrend = legacySignal.trend;
       }
 
-      pairStat.lastSignal = { ...legacySignal, action: finalAction, confidence: finalConfidence, reason: finalReason, signalCount: finalSignalCount, trend: finalTrend, signalsAgreeing: finalSignalCount };
-      pairStat.trend = finalTrend;
-      pairStat.signalStrength = finalConfidence;
+     pairStat.lastSignal = { ...legacySignal, action: finalAction, confidence: finalConfidence, reason: finalReason, signalCount: finalSignalCount, trend: finalTrend, signalsAgreeing: finalSignalCount };
+pairStat.trend = finalTrend;
+pairStat.signalStrength = finalConfidence;
+
+// ── NEREQO MARKET INTELLIGENCE LAYER ─────────────────────────────────────
+const marketState = buildMarketState({
+  instrument: pairStat.instrument,
+  direction: finalAction,
+
+  m15,
+  h1,
+  d1,
+  h4,
+
+  bid: price.bid,
+  ask: price.ask,
+  spreadPips,
+  maxSpreadPips: this.state.config.maxSpreadPips,
+
+  regime: regime.regime,
+  riskMood: regime.riskMood,
+  regimeConfidence: regime.regimeConfidence,
+  trendScore: regime.trendScore,
+  rangeScore: regime.rangeScore,
+  breakoutScore: regime.breakoutScore,
+  volatilityScore: regime.volatilityScore,
+});
+
+if (finalAction !== "WAIT") {
+  const beforeMarketStateConfidence = finalConfidence;
+
+  finalConfidence = Math.max(
+    0,
+    Math.min(0.99, finalConfidence + marketState.confidenceAdjustment)
+  );
+
+  this.log(
+    `🧠 MARKET STATE: ${pairStat.instrument} ${finalAction} — ` +
+    `${marketState.grade} ${marketState.score}/100 | ` +
+    `${(beforeMarketStateConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% | ` +
+    marketState.summary
+  );
+} else {
+  this.log(
+    `🧠 MARKET STATE: ${pairStat.instrument} WAIT — ` +
+    `${marketState.grade} ${marketState.score}/100 | ` +
+    marketState.summary
+  );
+}
 
                if (finalAction === "WAIT") {
         // === SAFE DETAILED REJECTION LOGGING ===
@@ -2678,6 +2729,8 @@ athenaQualityScore: athenaQuality.score,
 athenaConfidenceScore: athenaConfidence.score,
 athenaNeuralScore: neural.score,
 athenaEV: ev.expectedValue,
+marketStateScore: marketState.score,
+marketInstitutionalScore: marketState.institutionalScore,
   },
 });
 
