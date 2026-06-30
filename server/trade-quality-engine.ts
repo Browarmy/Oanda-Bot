@@ -91,8 +91,8 @@ export function evaluateTradeQuality(input: TradeQualityInput): TradeQualityResu
     approved,
     expectedEdgeR,
     reason: approved
-      ? `Drevantis quality ${grade} (${score}/100), expected edge +${expectedEdgeR.toFixed(2)}R`
-: `Drevantis quality ${grade} (${score}/100) below execution standard`,
+      ? `Nereqo quality ${grade} (${score}/100), expected edge +${expectedEdgeR.toFixed(2)}R`
+: `Nereqo quality ${grade} (${score}/100) below execution standard`,
     components: {
       confidence,
       pair,
