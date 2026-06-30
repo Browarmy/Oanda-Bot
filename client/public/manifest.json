@@ -1,6 +1,6 @@
 {
-  "name": "Drevantis",
-  "short_name": "Drevantis",
+  "name": "Neveqo",
+  "short_name": "Neveqo",
   "description": "Autonomous investment intelligence platform with institutional-grade risk management",
   "start_url": "/",
   "scope": "/",
@@ -25,7 +25,7 @@
   "categories": ["finance", "productivity"],
   "screenshots": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 720'><rect fill='%23000' width='540' height='720'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-size='60' fill='%23fbbf24' font-weight='bold' font-family='Arial, sans-serif'>Drevantis</text></svg>",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 720'><rect fill='%23000' width='540' height='720'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-size='60' fill='%23fbbf24' font-weight='bold' font-family='Arial, sans-serif'>Neveqo</text></svg>",
       "sizes": "540x720",
       "type": "image/svg+xml",
       "form_factor": "narrow"
