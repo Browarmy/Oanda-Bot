@@ -63,6 +63,12 @@ import { evaluateStrategyRotation } from "./strategy-rotation-engine";
 import { evaluateAthenaExecutiveBrain } from "./athena-executive-brain";
 import { buildMarketState } from "./market-intelligence-engine";
 import {
+  createTradeOpportunityAudit,
+  recordTradeBlock,
+  summariseTradeOpportunityAudit,
+  type TradeOpportunityAudit,
+} from "./trade-opportunity-audit";
+import {
   newsGuard,
   checkFvgRetest,
   fetchSentiment,
@@ -692,7 +698,8 @@ export class AutonomousEngine extends EventEmitter {
   private currentRegimes: Map<string, MarketRegime> = new Map();
   private wfResults: Map<string, WalkForwardResult> = new Map();
   private tradesSinceWalkForward = 0;
-  private m15Cache: Map<string, { candles: any[]; fetchedAt: number }> = new Map();
+private m15Cache: Map<string, { candles: any[]; fetchedAt: number }> = new Map();
+private currentAudit: TradeOpportunityAudit | null = null;
 
     constructor() {
     super();
@@ -989,6 +996,7 @@ added++;
     this.scanning = true;
     this.scanCycleCount++;
     this.state.currentSession = getCurrentSession();
+this.currentAudit = createTradeOpportunityAudit();
 
     try {
       if (!isSessionActive(this.state.config.sessions)) {
@@ -1084,16 +1092,18 @@ added++;
         // Cooldown: don't trade same pair within 5 minutes
         if (Date.now() - pairStat.lastTrade < PAIR_TRADE_COOLDOWN_MS) continue;
         // Learning engine: skip pairs auto-disabled due to poor performance
-        if (!learningEngine.isPairEnabled(pairStat.instrument)) {
-          this.log(`🚫 ${pairStat.instrument} disabled by learning engine — skipping`);
-          continue;
-        }
+      if (!learningEngine.isPairEnabled(pairStat.instrument)) {
+  this.log(`🚫 ${pairStat.instrument} disabled by learning engine — skipping`);
+  if (this.currentAudit) recordTradeBlock(this.currentAudit, "LEARNING_PAIR_DISABLED");
+  continue;
+}
         // Learning engine: skip low-weight hours
         const currentHour = new Date().getUTCHours();
         if (!learningEngine.isHourActive(currentHour)) {
-          this.log(`⏰ Hour ${currentHour}h UTC has low win rate — skipping this cycle`);
-          break;
-        }
+  this.log(`⏰ Hour ${currentHour}h UTC has low win rate — skipping this cycle`);
+  if (this.currentAudit) recordTradeBlock(this.currentAudit, "LEARNING_HOUR_DISABLED");
+  break;
+}
         await this.scanPair(pairStat, openTrades);
         await new Promise(r => setTimeout(r, 300));
       }
@@ -1101,11 +1111,16 @@ added++;
       this.log(`Scan error: ${e.message}`);
     }
 
-    this.scanning = false;
+   if (this.currentAudit) {
+  this.log(summariseTradeOpportunityAudit(this.currentAudit));
+}
+
+this.scanning = false;
   }
 
-  private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
+private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
     if (!this.api) return;
+    if (this.currentAudit) this.currentAudit.scanned++;
     try {
       const price = await this.api.getPrice(pairStat.instrument);
       pairStat.bid = price.bid;
@@ -1116,10 +1131,11 @@ added++;
       const isJpy = pairStat.instrument.includes("JPY");
 const pipSize = getPipSize(pairStat.instrument);
 const spreadPips = pipSize > 0 ? pairStat.spread / pipSize : 0;
-      if (spreadPips > this.state.config.maxSpreadPips) {
-        this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${this.state.config.maxSpreadPips}p — SKIP`);
-        return;
-      }
+    if (spreadPips > this.state.config.maxSpreadPips) {
+  this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${this.state.config.maxSpreadPips}p — SKIP`);
+  if (this.currentAudit) recordTradeBlock(this.currentAudit, "SPREAD");
+  return;
+}
 
       // ── Portfolio heat guard: max 4% total open risk ──────────────────────────
       this.portfolioHeat = calcPortfolioHeat(openTrades, this.state.accountEquity);
@@ -1285,9 +1301,12 @@ if (finalAction !== "WAIT") {
         }
 
         this.log(`🔍 ${pairStat.instrument} — WAIT | ${rejectDetails} | ${finalReason}`);
-        return;
+if (this.currentAudit) recordTradeBlock(this.currentAudit, "SIGNAL_WAIT");
+return;
       }
 
+
+if (this.currentAudit) this.currentAudit.signalsFound++;
       // ── H4 EMA50 TREND FILTER ──────────────────────────────────────────────
       if (h4.length >= 50) {
         const h4closes = h4.map(c => c.close);
@@ -1295,13 +1314,15 @@ if (finalAction !== "WAIT") {
         const h4ema50 = h4ema50arr[h4ema50arr.length - 1];
         const h4lastClose = h4closes[h4closes.length - 1];
         if (finalAction === "BUY" && h4lastClose < h4ema50) {
-          this.log(`🚫 H4 FILTER: ${pairStat.instrument} BUY blocked — counter-trend`);
-          return;
-        }
+  this.log(`🚫 H4 FILTER: ${pairStat.instrument} BUY blocked — counter-trend`);
+  if (this.currentAudit) recordTradeBlock(this.currentAudit, "H4_FILTER");
+  return;
+}
         if (finalAction === "SELL" && h4lastClose > h4ema50) {
-          this.log(`🚫 H4 FILTER: ${pairStat.instrument} SELL blocked — counter-trend`);
-          return;
-        }
+  this.log(`🚫 H4 FILTER: ${pairStat.instrument} SELL blocked — counter-trend`);
+  if (this.currentAudit) recordTradeBlock(this.currentAudit, "H4_FILTER");
+  return;
+}
         this.log(`✅ H4 aligned: ${pairStat.instrument} ${finalAction} (EMA50: ${h4ema50.toFixed(5)})`);
       }
       // ───────────────────────────────────────────────────────────────────────
@@ -1593,6 +1614,7 @@ if (finalConfidence < adaptiveThreshold.threshold) {
     },
   });
 
+    if (this.currentAudit) recordTradeBlock(this.currentAudit, "CONFIDENCE");
   return;
 }
 
@@ -2671,6 +2693,7 @@ await decisionJournal.record({
 pairStat.lastTrade = Date.now();
 this.state.totalTrades++;
 this.state.openTradesCount++;
+if (this.currentAudit) this.currentAudit.executed++;
 this.tradesSinceWalkForward++;
 
 this.openTradeSnapshots.set(tradeId, {
