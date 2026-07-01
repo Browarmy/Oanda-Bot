@@ -67,7 +67,7 @@ export default function Welcome({ onConnected }: WelcomeProps) {
             style={{ background: "linear-gradient(135deg, #f5a623, #e8940f)", boxShadow: "0 0 40px #f5a62340" }}>
             <span className="text-3xl">⚡</span>
           </div>
-          <h1 className="text-3xl font-black tracking-tight mb-1" style={{ color: "#f5f0e8" }}>Neveqo</h1>
+          <h1 className="text-3xl font-black tracking-tight mb-1" style={{ color: "#f5f0e8" }}>Nereqo</h1>
           <p className="text-sm font-medium" style={{ color: "#4a6080" }}>Autonomous Forex Trading</p>
         </div>
 
