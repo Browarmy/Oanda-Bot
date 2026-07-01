@@ -13,6 +13,7 @@ export type TradeBlockReason =
   | "NEWS"
   | "EXECUTION"
   | "SAFETY"
+| "FORECAST"
   | "OTHER";
 
 export interface TradeOpportunityAudit {
@@ -44,6 +45,7 @@ export function createTradeOpportunityAudit(): TradeOpportunityAudit {
       NEWS: 0,
       EXECUTION: 0,
       SAFETY: 0,
+FORECAST: 0,
       OTHER: 0,
     },
   };
@@ -78,5 +80,6 @@ export function summariseTradeOpportunityAudit(
     `news ${audit.blocked.NEWS} | ` +
     `execution ${audit.blocked.EXECUTION} | ` +
     `safety ${audit.blocked.SAFETY}`
+    `forecast ${audit.blocked.FORECAST} | ` +
   );
 }
