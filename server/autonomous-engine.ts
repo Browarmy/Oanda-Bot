@@ -1938,7 +1938,7 @@ await decisionJournal.record({
   );
 }
 
-// ── DREVANTIS MARKET FORECAST ENGINE ───────────────────────────────────────
+// ── NEREQO MARKET FORECAST ENGINE ───────────────────────────────────────
 const marketForecast = forecastMarketState({
   regime: regime.regime,
   regimeConfidence: regime.regimeConfidence,
@@ -1991,7 +1991,7 @@ this.log(
   `${marketForecast.reason}`
 );
 
-// ── DREVANTIS STRATEGY ROTATION ENGINE ──────────────────────────────────────
+// ── NEREQO STRATEGY ROTATION ENGINE ──────────────────────────────────────
 const strategyRotation = evaluateStrategyRotation({
   strategy: metaStrategy,
   recentTrades: this.state.tradeHistory.map(t => ({
@@ -2109,7 +2109,7 @@ await decisionJournal.record({
   },
 });
 
-// ── DREVANTIS CIO — PORTFOLIO COMMAND LAYER ───────────────────────────────────
+// ── NEREQO CIO — PORTFOLIO COMMAND LAYER ───────────────────────────────────
 const portfolioCio = evaluatePortfolioCio({
   accountBalance: this.state.accountBalance,
   accountEquity: this.state.accountEquity,
@@ -2388,7 +2388,7 @@ if (executionDecision.action === "WAIT") {
 
 this.log(`⚡ EXECUTION OK: ${executionDecision.reason}`);
 
-// ── DREVANTIS AI v5 — TRADE QUALITY ENGINE ───────────────────────────────────
+// ── NEREQO AI v5 — TRADE QUALITY ENGINE ───────────────────────────────────
 const spreadScore = Math.max(
   0,
   Math.min(1, 1 - spreadPips / this.state.config.maxSpreadPips)
@@ -2472,7 +2472,7 @@ const neural = evaluateAthenaNeuralScore({
 
 if (!athenaConfidence.approved) {
   this.log(
-    `🧠 DREVANTIS CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+`🧠 NEREQO CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     `${athenaConfidence.grade} ${athenaConfidence.score}/100 | ` +
     `Edge ${athenaConfidence.expectedEdgeR.toFixed(2)}R`
   );
@@ -2494,12 +2494,14 @@ if (!athenaConfidence.approved) {
     },
   });
 
+if (this.currentAudit) recordTradeBlock(this.currentAudit, "QUALITY");
+
   return;
 }
 
 if (!athenaQuality.approved) {
   this.log(
-    `🧠 DREVANTIS BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+`🧠 NEREQO QUALITY BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     athenaQuality.reason
   );
 
@@ -2528,6 +2530,8 @@ if (!athenaQuality.approved) {
 },
   });
 
+if (this.currentAudit) recordTradeBlock(this.currentAudit, "QUALITY");
+
   return;
 }
 
@@ -2549,6 +2553,8 @@ if (!ev.approved) {
     reason: ev.reason,
     extra: { ev },
   });
+
+if (this.currentAudit) recordTradeBlock(this.currentAudit, "EXPECTED_VALUE");
 
   return;
 }
@@ -2572,10 +2578,12 @@ if (!neural.approved) {
     extra: { neural },
   });
 
+if (this.currentAudit) recordTradeBlock(this.currentAudit, "NEURAL");
+
   return;
 }
 
-// ── DREVANTIS EXECUTIVE BRAIN ────────────────────────────────────────────────
+// ── NEREQO EXECUTIVE BRAIN ────────────────────────────────────────────────
 const executive = evaluateAthenaExecutiveBrain({
   confidence: finalConfidence,
   metaScore: metaApproval.metaScore,
@@ -2612,6 +2620,8 @@ if (!executive.approved) {
     extra: { executive },
   });
 
+if (this.currentAudit) recordTradeBlock(this.currentAudit, "EXECUTIVE");
+
   return;
 }
 
@@ -2626,7 +2636,7 @@ this.log(
 );
 
 this.log(
-    `🧠 DREVANTIS APPROVED: ${pairStat.instrument} ${finalAction} | ` +
+`🧠 NEREQO APPROVED: ${pairStat.instrument} ${finalAction} | ` +
     `${athenaQuality.grade} ${athenaQuality.score}/100 | ` +
     `Conf ${athenaConfidence.score}/100 | ` +
     `EV ${ev.expectedValue.toFixed(2)}R`
