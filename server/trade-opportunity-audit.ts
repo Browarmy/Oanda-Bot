@@ -3,6 +3,10 @@ export type TradeBlockReason =
   | "SPREAD"
   | "H4_FILTER"
   | "CONFIDENCE"
+  | "QUALITY"
+  | "EXPECTED_VALUE"
+  | "NEURAL"
+  | "EXECUTIVE"
   | "LEARNING_PAIR_DISABLED"
   | "LEARNING_HOUR_DISABLED"
   | "PORTFOLIO"
@@ -30,6 +34,10 @@ export function createTradeOpportunityAudit(): TradeOpportunityAudit {
       SPREAD: 0,
       H4_FILTER: 0,
       CONFIDENCE: 0,
+      QUALITY: 0,
+      EXPECTED_VALUE: 0,
+      NEURAL: 0,
+      EXECUTIVE: 0,
       LEARNING_PAIR_DISABLED: 0,
       LEARNING_HOUR_DISABLED: 0,
       PORTFOLIO: 0,
@@ -61,8 +69,13 @@ export function summariseTradeOpportunityAudit(
     `spread ${audit.blocked.SPREAD} | ` +
     `H4 ${audit.blocked.H4_FILTER} | ` +
     `confidence ${audit.blocked.CONFIDENCE} | ` +
+    `quality ${audit.blocked.QUALITY} | ` +
+    `EV ${audit.blocked.EXPECTED_VALUE} | ` +
+    `neural ${audit.blocked.NEURAL} | ` +
+    `executive ${audit.blocked.EXECUTIVE} | ` +
     `learning ${audit.blocked.LEARNING_PAIR_DISABLED + audit.blocked.LEARNING_HOUR_DISABLED} | ` +
     `portfolio ${audit.blocked.PORTFOLIO} | ` +
+    `news ${audit.blocked.NEWS} | ` +
     `execution ${audit.blocked.EXECUTION} | ` +
     `safety ${audit.blocked.SAFETY}`
   );
