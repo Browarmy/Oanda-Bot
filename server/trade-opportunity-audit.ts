@@ -71,6 +71,7 @@ export function summariseTradeOpportunityAudit(
     `spread ${audit.blocked.SPREAD} | ` +
     `H4 ${audit.blocked.H4_FILTER} | ` +
     `confidence ${audit.blocked.CONFIDENCE} | ` +
+    `forecast ${audit.blocked.FORECAST} | ` +
     `quality ${audit.blocked.QUALITY} | ` +
     `EV ${audit.blocked.EXPECTED_VALUE} | ` +
     `neural ${audit.blocked.NEURAL} | ` +
@@ -80,6 +81,5 @@ export function summariseTradeOpportunityAudit(
     `news ${audit.blocked.NEWS} | ` +
     `execution ${audit.blocked.EXECUTION} | ` +
     `safety ${audit.blocked.SAFETY}`
-    `forecast ${audit.blocked.FORECAST} | ` +
-  ;
+  );
 }
