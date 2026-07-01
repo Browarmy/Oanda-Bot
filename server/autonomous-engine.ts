@@ -1955,6 +1955,8 @@ if (!marketForecast.approved) {
     `${marketForecast.forecast} ${marketForecast.score}/100 | ${marketForecast.reason}`
   );
 
+  if (this.currentAudit) recordTradeBlock(this.currentAudit, "FORECAST");
+
   await decisionJournal.record({
     type: "BLOCKED",
     stage: "SIGNAL",
