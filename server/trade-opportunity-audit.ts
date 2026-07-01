@@ -81,5 +81,5 @@ export function summariseTradeOpportunityAudit(
     `execution ${audit.blocked.EXECUTION} | ` +
     `safety ${audit.blocked.SAFETY}`
     `forecast ${audit.blocked.FORECAST} | ` +
-  );
+  ;
 }
