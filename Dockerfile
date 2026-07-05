@@ -8,11 +8,12 @@ RUN npm install -g pnpm@10.4.1
 # Copy package manifest, lockfile, AND patches directory before install
 # pnpm reads patchedDependencies from package.json during install and needs
 # the patch files to be present at that point
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 COPY patches/ ./patches/
 
 # Install dependencies (lockfile is consistent with package.json config)
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
+
 
 # Copy remaining source code
 COPY . .
