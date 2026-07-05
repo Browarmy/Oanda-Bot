@@ -283,7 +283,7 @@ const DEFAULT_CONFIG: BotConfig = {
     "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", "AUD_USD",
     "USD_CAD", "EUR_GBP", "EUR_JPY", "GBP_JPY", "XAU_USD",
   ],
-  maxSpreadPips: 2,             // tighter spread filter (was 3)
+maxSpreadPips: 3.5,           // practice account spread tolerance
   minRRRatio: 2.0,              // 2:1 RR minimum (was 1.8)
   trailingStopEnabled: true,
   trailingStopAtr: 1.0,
@@ -1291,7 +1291,8 @@ if (finalAction !== "WAIT") {
   );
 }
 
-if (pairStat.instrument === "EUR_USD") {
+try {
+  if (pairStat.instrument === "EUR_USD") {
   const memoryNewsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
   const memoryUpcomingNews = newsGuard.getUpcomingEvents(pairStat.instrument);
   const memorySessionContext = getSessionContext(utcHour);
@@ -1312,7 +1313,7 @@ if (pairStat.instrument === "EUR_USD") {
     direction: finalAction,
   } as const;
 
-  await writeMemoryObservation({
+    await writeMemoryObservation({
     instrument: pairStat.instrument,
     observedAt: new Date(),
     marketState: {
@@ -1335,6 +1336,9 @@ if (pairStat.instrument === "EUR_USD") {
       spreadPips,
     },
   });
+  }
+} catch (error) {
+  this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
 }
 
                if (finalAction === "WAIT") {
