@@ -62,6 +62,8 @@ import { forecastMarketState } from "./athena-market-forecast";
 import { evaluateStrategyRotation } from "./strategy-rotation-engine";
 import { evaluateAthenaExecutiveBrain } from "./athena-executive-brain";
 import { buildMarketState } from "./market-intelligence-engine";
+import { writeMemoryObservation } from "./memory/observationWriter";
+import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
 import {
   createTradeOpportunityAudit,
   recordTradeBlock,
@@ -1287,6 +1289,52 @@ if (finalAction !== "WAIT") {
     `${marketState.grade} ${marketState.score}/100 | ` +
     marketState.summary
   );
+}
+
+if (pairStat.instrument === "EUR_USD") {
+  const memoryNewsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
+  const memoryUpcomingNews = newsGuard.getUpcomingEvents(pairStat.instrument);
+  const memorySessionContext = getSessionContext(utcHour);
+
+  const memoryInput = {
+    marketState,
+    trendDirection: finalTrend,
+    session: memorySessionContext.session,
+    momentumDirection:
+      finalAction === "BUY" ? "BULLISH" :
+      finalAction === "SELL" ? "BEARISH" :
+      "NEUTRAL",
+    macroFlag:
+      memoryNewsCheck.blocked ? "ACTIVE_SHOCK" :
+      memoryUpcomingNews.length > 0 ? "SCHEDULED_EVENT" :
+      "NONE",
+    confidenceScore: finalConfidence,
+    direction: finalAction,
+  } as const;
+
+  await writeMemoryObservation({
+    instrument: pairStat.instrument,
+    observedAt: new Date(),
+    marketState: {
+      ...marketState,
+      memorySession: memorySessionContext.session,
+      memoryMacroFlag: memoryInput.macroFlag,
+      memoryMomentumDirection: memoryInput.momentumDirection,
+      memoryTrendDirection: memoryInput.trendDirection,
+    },
+    dnaVector: encodeMarketStateToDnaVector(memoryInput),
+    source: "autonomous_engine",
+    timeframe: "M15",
+    decisionContext: {
+      finalAction,
+      finalConfidence,
+      finalReason,
+      regime: regime.regime,
+      riskMood: regime.riskMood,
+      strategy: stratSignal.strategy,
+      spreadPips,
+    },
+  });
 }
 
                if (finalAction === "WAIT") {
