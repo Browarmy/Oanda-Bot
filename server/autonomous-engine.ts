@@ -64,6 +64,7 @@ import { evaluateAthenaExecutiveBrain } from "./athena-executive-brain";
 import { buildMarketState } from "./market-intelligence-engine";
 import { writeMemoryObservation } from "./memory/observationWriter";
 import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
+import { buildHistorianReport } from "./memory/historian";
 import {
   createTradeOpportunityAudit,
   recordTradeBlock,
@@ -1313,7 +1314,9 @@ try {
     direction: finalAction,
   } as const;
 
-    await writeMemoryObservation({
+const memoryDnaVector = encodeMarketStateToDnaVector(memoryInput);
+
+await writeMemoryObservation({
     instrument: pairStat.instrument,
     observedAt: new Date(),
     marketState: {
@@ -1323,7 +1326,7 @@ try {
       memoryMomentumDirection: memoryInput.momentumDirection,
       memoryTrendDirection: memoryInput.trendDirection,
     },
-    dnaVector: encodeMarketStateToDnaVector(memoryInput),
+dnaVector: memoryDnaVector,
     source: "autonomous_engine",
     timeframe: "M15",
     decisionContext: {
@@ -1336,6 +1339,24 @@ try {
       spreadPips,
     },
   });
+const historianReport = await buildHistorianReport({
+  instrument: pairStat.instrument,
+  dnaVector: memoryDnaVector,
+});
+
+if (historianReport.status === "insufficient_memory_depth") {
+  this.log(`📜 HISTORIAN: ${pairStat.instrument} insufficient Memory depth — ${historianReport.similarStatesFound}/${historianReport.minimumRequired} similar states`);
+} else {
+  const topAnalogue = historianReport.topAnalogues[0];
+
+  this.log(
+    `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
+    `top=${topAnalogue.similarityScore} ${topAnalogue.decisionMade} | ` +
+    `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
+    `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
+    `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
+  );
+}
   }
 } catch (error) {
   this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
