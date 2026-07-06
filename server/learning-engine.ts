@@ -322,6 +322,9 @@ export class LearningEngine {
   private lastEvolutionTradeCount = 0;
   private readonly PAIR_DISABLE_THRESHOLD = 0.35;  // disable pair if win rate < 35%
   private readonly PAIR_ENABLE_THRESHOLD = 0.45;   // re-enable if win rate recovers to 45%
+private readonly MAX_PAIR_CONFIDENCE_THRESHOLD = 0.88;
+private readonly CONFIDENCE_DECAY_START_MS = 48 * 60 * 60 * 1000;
+private readonly CONFIDENCE_DECAY_RATE_PER_DAY = 0.01;
   private readonly MAX_PATTERNS = 500;
 
   constructor() {
@@ -471,9 +474,9 @@ athenaEV?: number;
     if (trade.won) {
       pair.confidenceThreshold = Math.max(0.72, pair.confidenceThreshold - 0.003);
     } else {
-      pair.confidenceThreshold = Math.min(0.95, pair.confidenceThreshold + 0.015);
-      if (pair.consecutiveLosses >= 3) {
-        pair.confidenceThreshold = Math.min(0.95, pair.confidenceThreshold + 0.02);
+pair.confidenceThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, pair.confidenceThreshold + 0.015);
+if (pair.consecutiveLosses >= 3) {
+  pair.confidenceThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, pair.confidenceThreshold + 0.02);
         this.addInsight(`⚠ ${trade.instrument}: ${pair.consecutiveLosses} consecutive losses — raising threshold to ${(pair.confidenceThreshold * 100).toFixed(0)}%`);
       }
     }
@@ -803,10 +806,38 @@ return true;
     return sess.weight >= 0.3;
   }
 
-  getPairConfidenceThreshold(instrument: string): number {
-    const p = this.state.pairs[instrument];
-    return p?.confidenceThreshold ?? this.state.params.minConfidence;
+getPairConfidenceThreshold(instrument: string): number {
+  const p = this.state.pairs[instrument];
+
+  if (!p) {
+    return Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, this.state.params.minConfidence);
   }
+
+  const baseThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, this.state.params.minConfidence);
+  const cappedThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, p.confidenceThreshold);
+  const idleMs = Date.now() - p.lastUpdated;
+
+  if (idleMs <= this.CONFIDENCE_DECAY_START_MS || cappedThreshold <= baseThreshold) {
+    if (p.confidenceThreshold !== cappedThreshold) {
+      p.confidenceThreshold = cappedThreshold;
+      this.dirty = true;
+    }
+
+    return cappedThreshold;
+  }
+
+  const decayDays = (idleMs - this.CONFIDENCE_DECAY_START_MS) / 86_400_000;
+  const decayAmount = decayDays * this.CONFIDENCE_DECAY_RATE_PER_DAY;
+  const decayedThreshold = Math.max(baseThreshold, cappedThreshold - decayAmount);
+  const roundedThreshold = Number(decayedThreshold.toFixed(4));
+
+  if (roundedThreshold < p.confidenceThreshold) {
+    p.confidenceThreshold = roundedThreshold;
+    this.dirty = true;
+  }
+
+  return roundedThreshold;
+}
 
   getState(): LearningState {
     return JSON.parse(JSON.stringify(this.state));
