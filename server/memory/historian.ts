@@ -1,5 +1,6 @@
 // server/memory/historian.ts
 
+import { memoryQuery } from "./memory-db";
 import { searchSimilarMemoryObservations } from "./similaritySearch";
 import type { DnaVector } from "./dnaEncoder";
 
@@ -23,6 +24,8 @@ export type HistorianReport =
   | {
       status: "insufficient_memory_depth";
       instrument: string;
+      totalObservations: number;
+      qualityObservations: number;
       similarStatesFound: number;
       minimumRequired: number;
       message: string;
@@ -30,6 +33,8 @@ export type HistorianReport =
   | {
       status: "ready";
       instrument: string;
+      totalObservations: number;
+      qualityObservations: number;
       similarStatesFound: number;
       topAnalogues: HistorianAnalogue[];
       historicalDecisionDistribution: {
@@ -42,8 +47,14 @@ export type HistorianReport =
       message: string;
     };
 
-const MINIMUM_HISTORIAN_DEPTH = 5;
-const HISTORIAN_SEARCH_LIMIT = 10;
+type MemoryDepthRow = {
+  total_observations: string;
+  quality_observations: string;
+};
+
+const MINIMUM_HISTORIAN_DEPTH = 10;
+const HISTORIAN_SEARCH_LIMIT = 25;
+const QUALITY_SCORE_FLOOR = 0.7;
 
 function roundPercent(value: number): number {
   if (!Number.isFinite(value)) return 0.0;
@@ -59,7 +70,7 @@ function getDecisionContextValue(
   context: Record<string, unknown> | null,
   key: string
 ): unknown {
-  if (!context || typeof context !== "object") return undefined;
+  if (!context || typeof context !== "object" || Array.isArray(context)) return undefined;
   return context[key];
 }
 
@@ -78,7 +89,31 @@ function extractConfidenceScore(context: Record<string, unknown> | null): number
     return null;
   }
 
-  return rawValue;
+  return Math.max(0.0, Math.min(1.0, rawValue));
+}
+
+async function getMemoryDepth(instrument: string): Promise<{
+  totalObservations: number;
+  qualityObservations: number;
+}> {
+  const rows = await memoryQuery<MemoryDepthRow>(
+    `
+      SELECT
+        COUNT(*)::text AS total_observations,
+        COUNT(*) FILTER (
+          WHERE memory_quality_score >= $2
+            AND data_integrity_score >= $2
+        )::text AS quality_observations
+      FROM memory_observations
+      WHERE instrument = $1
+    `,
+    [instrument, QUALITY_SCORE_FLOOR]
+  );
+
+  return {
+    totalObservations: Number(rows[0]?.total_observations ?? 0),
+    qualityObservations: Number(rows[0]?.quality_observations ?? 0),
+  };
 }
 
 function buildDecisionDistribution(decisions: HistoricalDecision[]): {
@@ -123,19 +158,25 @@ function averageConfidence(confidenceScores: Array<number | null>): number | nul
 export async function buildHistorianReport(input: HistorianInput): Promise<HistorianReport> {
   const instrument = input.instrument.trim().toUpperCase();
 
-  const similarObservations = await searchSimilarMemoryObservations({
-    instrument,
-    dnaVector: input.dnaVector,
-    limit: HISTORIAN_SEARCH_LIMIT,
-  });
+  const [memoryDepth, similarObservations] = await Promise.all([
+    getMemoryDepth(instrument),
+    searchSimilarMemoryObservations({
+      instrument,
+      dnaVector: input.dnaVector,
+      limit: HISTORIAN_SEARCH_LIMIT,
+    }),
+  ]);
 
   if (similarObservations.length < MINIMUM_HISTORIAN_DEPTH) {
     return {
       status: "insufficient_memory_depth",
       instrument,
+      totalObservations: memoryDepth.totalObservations,
+      qualityObservations: memoryDepth.qualityObservations,
       similarStatesFound: similarObservations.length,
       minimumRequired: MINIMUM_HISTORIAN_DEPTH,
-      message: "Insufficient Memory depth for Historian v1 report. Observation only; no decision influence applied.",
+      message:
+        "Insufficient Memory depth for Historian v1 report. Observation only; no decision influence applied.",
     };
   }
 
@@ -156,6 +197,8 @@ export async function buildHistorianReport(input: HistorianInput): Promise<Histo
   return {
     status: "ready",
     instrument,
+    totalObservations: memoryDepth.totalObservations,
+    qualityObservations: memoryDepth.qualityObservations,
     similarStatesFound: similarObservations.length,
     topAnalogues: analogues.slice(0, 3),
     historicalDecisionDistribution: buildDecisionDistribution(
@@ -164,6 +207,7 @@ export async function buildHistorianReport(input: HistorianInput): Promise<Histo
     averageConfidenceInSimilarStates: averageConfidence(
       analogues.map((analogue) => analogue.confidenceScore)
     ),
-    message: "Historian v1 report generated for observation and logging only. No decision blocking or confidence modification applied.",
+    message:
+      "Historian v1 report generated for observation and logging only. No decision blocking or confidence modification applied.",
   };
 }
