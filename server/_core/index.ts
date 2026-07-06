@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { memoryMigrationStartup } from "../memory/migrationRunner";
+import { memoryQuery } from "../memory/memory-db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -29,14 +30,15 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
-
 async function startServer() {
   await memoryMigrationStartup;
+
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
+
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
 
@@ -45,7 +47,6 @@ async function startServer() {
     res.json(await getPersistentMemoryStatus());
   });
 
-  // tRPC API
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -53,7 +54,45 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+
+  app.get("/api/memory-health", async (_req, res) => {
+    try {
+      const rows = await memoryQuery<{
+        total_observations: string;
+        quality_observations: string;
+        last_observed_at: string | null;
+        last_created_at: string | null;
+      }>(`
+        SELECT
+          COUNT(*)::text AS total_observations,
+          COUNT(*) FILTER (WHERE memory_quality_score >= 0.7)::text AS quality_observations,
+          MAX(observed_at)::text AS last_observed_at,
+          MAX(created_at)::text AS last_created_at
+        FROM memory_observations
+      `);
+
+      const row = rows[0];
+
+      res.json({
+        ok: true,
+        database: "postgresql",
+        isolated: true,
+        totalObservations: Number(row?.total_observations ?? 0),
+        qualityObservations: Number(row?.quality_observations ?? 0),
+        lastObservedAt: row?.last_observed_at ?? null,
+        lastCreatedAt: row?.last_created_at ?? null,
+        qualityThreshold: 0.7,
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        database: "postgresql",
+        isolated: true,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
