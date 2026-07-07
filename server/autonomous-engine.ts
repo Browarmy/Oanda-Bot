@@ -769,6 +769,7 @@ await strategyRegimeMatrix.load();
     this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
+state.config.maxSpreadPips = Math.max(3.5, lp.maxSpreadPips ?? 3.5);
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
 
     try {
@@ -1091,9 +1092,21 @@ this.currentAudit = createTradeOpportunityAudit();
 
   for (const pairStat of enabledPairs) {
         if (this.state.openTradesCount >= this.state.config.maxConcurrentTrades) break;
-        if (pairStat.openTrades.length > 0) continue;
+if (pairStat.openTrades.length > 0) {
+  this.log(`⏭️ SKIP: ${pairStat.instrument} has ${pairStat.openTrades.length} open trade(s)`);
+  continue;
+}
         // Cooldown: don't trade same pair within 5 minutes
-        if (Date.now() - pairStat.lastTrade < PAIR_TRADE_COOLDOWN_MS) continue;
+const timeSinceLastTrade = Date.now() - pairStat.lastTrade;
+
+if (timeSinceLastTrade < PAIR_TRADE_COOLDOWN_MS) {
+  this.log(
+    `⏭️ SKIP: ${pairStat.instrument} cooldown — ${Math.round(
+      timeSinceLastTrade / 1000 / 60
+    )}min remaining`
+  );
+  continue;
+}
         // Learning engine: skip pairs auto-disabled due to poor performance
       if (!learningEngine.isPairEnabled(pairStat.instrument)) {
   this.log(`🚫 ${pairStat.instrument} disabled by learning engine — skipping`);
