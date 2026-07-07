@@ -769,6 +769,7 @@ await strategyRegimeMatrix.load();
     this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
+state.config.maxSpreadPips = Math.max(3.5, lp.maxSpreadPips ?? 3.5);
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
 
     try {
