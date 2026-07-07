@@ -406,9 +406,55 @@ getTodayDailyReport: publicProcedure.query(async () => {
       return learningEngine.getState();
     }),
 
+    getLearningState: publicProcedure.query(() => {
+      const state = learningEngine.getState();
+
+      return {
+        params: {
+          minConfidence: state.params?.minConfidence,
+          version: state.params?.version,
+          current: state.params ?? {},
+        },
+        pairs: Object.fromEntries(
+          Object.entries(state.pairs ?? {}).map(([instrument, pair]) => [
+            instrument,
+            {
+              trades: pair.trades,
+              winRate: pair.winRate,
+              score: pair.score,
+              confidenceThreshold: pair.confidenceThreshold,
+              enabled: pair.enabled,
+            },
+          ])
+        ),
+        strategies: Object.fromEntries(
+          Object.entries(state.strategies ?? {}).map(([strategy, item]) => [
+            strategy,
+            {
+              trades: item.trades,
+              winRate: item.winRate,
+              score: item.score,
+              enabled: item.enabled,
+            },
+          ])
+        ),
+        regimes: Object.fromEntries(
+          Object.entries(state.regimes ?? {}).map(([regime, item]) => [
+            regime,
+            {
+              trades: item.trades,
+              winRate: item.winRate,
+              score: item.score,
+              enabled: item.enabled,
+            },
+          ])
+        ),
+        insights: (state.insights ?? []).slice(-10),
+      };
+    }),
+
     // Get learning insights (human-readable)
-// Get learning insights (human-readable)
-getLearningInsights: publicProcedure.query(() => {
+    getLearningInsights: publicProcedure.query(() => {
   const state = learningEngine.getState();
 
   return {
