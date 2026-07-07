@@ -460,26 +460,24 @@ athenaEV?: number;
     pair.score = computePairScore(pair);
     pair.lastUpdated = Date.now();
 
-    // Auto-disable/enable pairs
-    if (pair.trades >= 10 && pair.winRate < this.PAIR_DISABLE_THRESHOLD && pair.enabled) {
-      pair.enabled = false;
-      this.addInsight(`🚫 Auto-disabled ${trade.instrument} (win rate ${(pair.winRate * 100).toFixed(0)}% after ${pair.trades} trades)`);
-    }
-    if (pair.trades >= 10 && pair.winRate >= this.PAIR_ENABLE_THRESHOLD && !pair.enabled) {
-      pair.enabled = true;
-      this.addInsight(`✅ Re-enabled ${trade.instrument} (win rate recovered to ${(pair.winRate * 100).toFixed(0)}%)`);
+    // Pairs are never hard-disabled — penalised through confidence threshold instead
+    pair.enabled = true;
+    if (pair.trades >= 10 && pair.winRate < this.PAIR_DISABLE_THRESHOLD) {
+      this.addInsight(`🟡 ${trade.instrument}: weak pair WR ${(pair.winRate * 100).toFixed(0)}% after ${pair.trades} trades — monitored, not disabled`);
     }
 
-    // Adaptive confidence threshold per pair
+
+    // Adaptive confidence threshold per pair — capped at 0.88 to prevent deadlock
     if (trade.won) {
       pair.confidenceThreshold = Math.max(0.72, pair.confidenceThreshold - 0.003);
     } else {
-pair.confidenceThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, pair.confidenceThreshold + 0.015);
-if (pair.consecutiveLosses >= 3) {
-  pair.confidenceThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, pair.confidenceThreshold + 0.02);
+      pair.confidenceThreshold = Math.min(0.88, pair.confidenceThreshold + 0.015);
+      if (pair.consecutiveLosses >= 3) {
+        pair.confidenceThreshold = Math.min(0.88, pair.confidenceThreshold + 0.02);
         this.addInsight(`⚠ ${trade.instrument}: ${pair.consecutiveLosses} consecutive losses — raising threshold to ${(pair.confidenceThreshold * 100).toFixed(0)}%`);
       }
     }
+
 
     // Track best direction
     if (pair.trades >= 10) {
@@ -530,19 +528,14 @@ strat.profitFactor =
 strat.score = computeStrategyScore(strat);
 strat.lastUpdated = Date.now();
 
-if (strat.trades >= 10 && strat.score < 0.35 && strat.enabled) {
-  strat.enabled = false;
+// Strategies are never hard-disabled — monitored through score only
+strat.enabled = true;
+if (strat.trades >= 10 && strat.score < 0.35) {
   this.addInsight(
-    `🚫 Strategy ${strategyName} disabled — score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}%`
+    `🟡 Strategy ${strategyName}: weak score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}% — monitored, not disabled`
   );
 }
 
-if (strat.trades >= 10 && strat.score >= 0.45 && !strat.enabled) {
-  strat.enabled = true;
-  this.addInsight(
-    `✅ Strategy ${strategyName} re-enabled — score ${(strat.score * 100).toFixed(0)}%, WR ${(strat.winRate * 100).toFixed(0)}%`
-  );
-}
 
 // 2c. Update confidence calibration
 
@@ -619,27 +612,14 @@ regimeLearning.profitFactor =
 regimeLearning.score = computeRegimeScore(regimeLearning);
 regimeLearning.lastUpdated = Date.now();
 
-if (
-  regimeLearning.trades >= 10 &&
-  regimeLearning.score < 0.35 &&
-  regimeLearning.enabled
-) {
-  regimeLearning.enabled = false;
+// Regimes are never hard-disabled — monitored through score only
+regimeLearning.enabled = true;
+if (regimeLearning.trades >= 10 && regimeLearning.score < 0.35) {
   this.addInsight(
-    `🚫 Regime ${regimeName} disabled — score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}%`
+    `🟡 Regime ${regimeName}: weak score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}% — monitored, not disabled`
   );
 }
 
-if (
-  regimeLearning.trades >= 10 &&
-  regimeLearning.score >= 0.45 &&
-  !regimeLearning.enabled
-) {
-  regimeLearning.enabled = true;
-  this.addInsight(
-    `✅ Regime ${regimeName} re-enabled — score ${(regimeLearning.score * 100).toFixed(0)}%, WR ${(regimeLearning.winRate * 100).toFixed(0)}%`
-  );
-}
 
     // 3. Store pattern
     const atrNorm = trade.entryPrice > 0 ? trade.atr / trade.entryPrice : 0;
@@ -794,11 +774,11 @@ return true;
     return this.state.pairs[instrument] ?? defaultPairLearning(instrument);
   }
 
-  isPairEnabled(instrument: string): boolean {
-    const p = this.state.pairs[instrument];
-    if (!p) return true; // new pair — allow
-    return p.enabled;
+   isPairEnabled(_instrument: string): boolean {
+    return true;
   }
+
+
 
   isHourActive(hour: number): boolean {
     const sess = this.state.sessions[hour];
@@ -854,11 +834,11 @@ getStrategyLearning(strategy: string): StrategyLearning {
   return this.state.strategies[strategy] ?? defaultStrategyLearning(strategy);
 }
 
-isStrategyEnabled(strategy: string): boolean {
-  const s = this.state.strategies[strategy];
-  if (!s) return true;
-  return s.enabled;
+
+isStrategyEnabled(_strategy: string): boolean {
+  return true;
 }
+
 
 getTopStrategies(n = 5): StrategyLearning[] {
   return Object.values(this.state.strategies)
@@ -923,11 +903,10 @@ getRegimeLearning(regime: string): RegimeLearning {
   return this.state.regimes[regime] ?? defaultRegimeLearning(regime);
 }
 
-isRegimeEnabled(regime: string): boolean {
-  const r = this.state.regimes[regime];
-  if (!r) return true;
-  return r.enabled;
+iisRegimeEnabled(_regime: string): boolean {
+  return true;
 }
+
 
 getTopRegimes(n = 5): RegimeLearning[] {
   return Object.values(this.state.regimes)
