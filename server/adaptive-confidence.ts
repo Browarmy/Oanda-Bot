@@ -88,7 +88,7 @@ function formatPct(value: number): string {
 export function calculateAdaptiveConfidenceThreshold(
   input: AdaptiveConfidenceInput
 ): AdaptiveConfidenceResult {
-  const baseThreshold = clamp(input.baseThreshold, 0.6, 0.92);
+  const baseThreshold = clamp(input.baseThreshold, 0.6, 0.86);
 
   const pairScore = normaliseScore(input.pairScore, 0.5);
   const strategyScore = normaliseScore(input.strategyScore, 0.5);
@@ -133,7 +133,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "STRATEGY_LEARNING",
-      adjustment: 0.04,
+      adjustment: 0.02,
       reason: "weak strategy",
       inputValue: round(strategyScore),
       currentThreshold: workingThreshold,
@@ -153,7 +153,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "REGIME_LEARNING",
-      adjustment: 0.04,
+      adjustment: 0.02,
       reason: "weak regime",
       inputValue: round(regimeScore),
       currentThreshold: workingThreshold,
@@ -173,7 +173,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "CONFIDENCE_CALIBRATION",
-      adjustment: 0.03,
+      adjustment: 0.02,
       reason: "poor confidence calibration",
       inputValue: round(confidenceCalibrationScore),
       currentThreshold: workingThreshold,
@@ -184,7 +184,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "REGIME_CONFIDENCE",
-      adjustment: 0.03,
+      adjustment: 0.02,
       reason: "low regime confidence",
       inputValue: round(regimeConfidence),
       currentThreshold: workingThreshold,
@@ -214,7 +214,7 @@ export function calculateAdaptiveConfidenceThreshold(
   }
 
   const unclampedThreshold = workingThreshold;
-  const threshold = clamp(unclampedThreshold, 0.6, 0.92);
+  const threshold = clamp(unclampedThreshold, 0.6, 0.86);
   const adjustment = round(threshold - baseThreshold);
 
   if (threshold !== unclampedThreshold) {
@@ -222,7 +222,7 @@ export function calculateAdaptiveConfidenceThreshold(
       source: "SAFETY_CLAMP",
       adjustment: round(threshold - unclampedThreshold),
       reason: "threshold clamped to safe operating range",
-      inputValue: `${formatPct(0.6)}-${formatPct(0.92)}`,
+      inputValue: `${formatPct(0.6)}-${formatPct(0.86)}`,
       beforeThreshold: round(unclampedThreshold),
       afterThreshold: round(threshold),
     });
