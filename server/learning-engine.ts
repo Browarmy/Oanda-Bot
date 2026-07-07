@@ -470,16 +470,17 @@ athenaEV?: number;
       this.addInsight(`✅ Re-enabled ${trade.instrument} (win rate recovered to ${(pair.winRate * 100).toFixed(0)}%)`);
     }
 
-    // Adaptive confidence threshold per pair
+    // Adaptive confidence threshold per pair — capped at 0.88 to prevent deadlock
     if (trade.won) {
       pair.confidenceThreshold = Math.max(0.72, pair.confidenceThreshold - 0.003);
     } else {
-pair.confidenceThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, pair.confidenceThreshold + 0.015);
-if (pair.consecutiveLosses >= 3) {
-  pair.confidenceThreshold = Math.min(this.MAX_PAIR_CONFIDENCE_THRESHOLD, pair.confidenceThreshold + 0.02);
+      pair.confidenceThreshold = Math.min(0.88, pair.confidenceThreshold + 0.015);
+      if (pair.consecutiveLosses >= 3) {
+        pair.confidenceThreshold = Math.min(0.88, pair.confidenceThreshold + 0.02);
         this.addInsight(`⚠ ${trade.instrument}: ${pair.consecutiveLosses} consecutive losses — raising threshold to ${(pair.confidenceThreshold * 100).toFixed(0)}%`);
       }
     }
+
 
     // Track best direction
     if (pair.trades >= 10) {
