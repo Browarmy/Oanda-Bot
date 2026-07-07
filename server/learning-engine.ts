@@ -774,11 +774,11 @@ return true;
     return this.state.pairs[instrument] ?? defaultPairLearning(instrument);
   }
 
-  isPairEnabled(instrument: string): boolean {
-    const p = this.state.pairs[instrument];
-    if (!p) return true; // new pair — allow
-    return p.enabled;
+   isPairEnabled(_instrument: string): boolean {
+    return true;
   }
+
+
 
   isHourActive(hour: number): boolean {
     const sess = this.state.sessions[hour];
@@ -834,11 +834,11 @@ getStrategyLearning(strategy: string): StrategyLearning {
   return this.state.strategies[strategy] ?? defaultStrategyLearning(strategy);
 }
 
-isStrategyEnabled(strategy: string): boolean {
-  const s = this.state.strategies[strategy];
-  if (!s) return true;
-  return s.enabled;
+
+isStrategyEnabled(_strategy: string): boolean {
+  return true;
 }
+
 
 getTopStrategies(n = 5): StrategyLearning[] {
   return Object.values(this.state.strategies)
@@ -903,11 +903,10 @@ getRegimeLearning(regime: string): RegimeLearning {
   return this.state.regimes[regime] ?? defaultRegimeLearning(regime);
 }
 
-isRegimeEnabled(regime: string): boolean {
-  const r = this.state.regimes[regime];
-  if (!r) return true;
-  return r.enabled;
+iisRegimeEnabled(_regime: string): boolean {
+  return true;
 }
+
 
 getTopRegimes(n = 5): RegimeLearning[] {
   return Object.values(this.state.regimes)
