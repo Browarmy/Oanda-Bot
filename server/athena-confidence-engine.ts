@@ -56,11 +56,11 @@ export function evaluateAthenaConfidence(
 
         pair:12,
 
-        strategy:12,
+        strategy:8,
 
-        regime:10,
+        regime:7,
 
-        memory:12,
+        memory:15,
 
         calibration:8,
 
@@ -74,7 +74,7 @@ export function evaluateAthenaConfidence(
 
         risk:10,
 
-        execution:10
+        execution:14
 
     };
 
