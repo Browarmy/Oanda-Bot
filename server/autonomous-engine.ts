@@ -65,6 +65,7 @@ import { buildMarketState } from "./market-intelligence-engine";
 import { writeMemoryObservation } from "./memory/observationWriter";
 import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
 import { buildHistorianReport } from "./memory/historian";
+import { startMemoryOutcomeUpdater } from "./memory/outcomeUpdater";
 import {
   createTradeOpportunityAudit,
   recordTradeBlock,
@@ -819,6 +820,8 @@ if (evoStatus) {
     `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} toward next evolution`
   );
 }
+
+startMemoryOutcomeUpdater(this.api);
 
     // === DAILY PERFORMANCE SUMMARY ===
     const winRate = this.state.totalTrades > 0 
