@@ -65,6 +65,7 @@ import { buildMarketState } from "./market-intelligence-engine";
 import { writeMemoryObservation } from "./memory/observationWriter";
 import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
 import { buildHistorianReport } from "./memory/historian";
+import { startMemoryOutcomeUpdater } from "./memory/outcomeUpdater";
 import {
   createTradeOpportunityAudit,
   recordTradeBlock,
@@ -769,7 +770,7 @@ await strategyRegimeMatrix.load();
     this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
-state.config.maxSpreadPips = Math.max(3.5, lp.maxSpreadPips ?? 3.5);
+this.state.config.maxSpreadPips = Math.max(3.5, lp.maxSpreadPips ?? 3.5);
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
 
     try {
@@ -819,6 +820,8 @@ if (evoStatus) {
     `${evoStatus.tradesSinceEvolution}/${evoStatus.evolutionInterval} toward next evolution`
   );
 }
+
+startMemoryOutcomeUpdater(this.api);
 
     // === DAILY PERFORMANCE SUMMARY ===
     const winRate = this.state.totalTrades > 0 
