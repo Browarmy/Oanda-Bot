@@ -362,6 +362,129 @@ return { success: true };
     getHistory: publicProcedure.query(() => {
       return autonomousEngine.getState().tradeHistory;
     }),
+
+    getPerformanceAnalytics: publicProcedure.query(() => {
+      const state = autonomousEngine.getState();
+      const learning = learningEngine.getState();
+      const trades = [...(state.tradeHistory ?? [])];
+
+      type AnalyticsTrade = (typeof trades)[number];
+
+      const safeNumber = (value: number | undefined | null): number =>
+        typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+      const createBucket = (label: string) => ({
+        label,
+        trades: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        grossProfit: 0,
+        grossLoss: 0,
+        netPnl: 0,
+        totalPips: 0,
+        avgPips: 0,
+        expectancy: 0,
+        profitFactor: 1,
+        maxDrawdown: 0,
+      });
+
+      type AnalyticsBucket = ReturnType<typeof createBucket>;
+
+      const getSession = (trade: AnalyticsTrade): "LONDON" | "OVERLAP" | "NEW_YORK" | "OTHER" => {
+const timestamp = trade.openTime ?? trade.closedAt ?? trade.exitTime ?? Date.now();
+const hour = new Date(timestamp).getUTCHours();
+
+        if (hour >= 8 && hour < 12) return "LONDON";
+        if (hour >= 12 && hour < 13) return "OVERLAP";
+        if (hour >= 13 && hour < 17) return "NEW_YORK";
+        return "OTHER";
+      };
+
+      const addTrade = (bucket: AnalyticsBucket, trade: AnalyticsTrade): void => {
+        const pnl = safeNumber(trade.pnl);
+        const pips = safeNumber(trade.pips);
+
+        bucket.trades += 1;
+        bucket.wins += trade.won ? 1 : 0;
+        bucket.losses += trade.won ? 0 : 1;
+        bucket.grossProfit += Math.max(0, pnl);
+        bucket.grossLoss += Math.abs(Math.min(0, pnl));
+        bucket.netPnl += pnl;
+        bucket.totalPips += pips;
+      };
+
+      const finaliseBucket = (bucket: AnalyticsBucket, bucketTrades: AnalyticsTrade[]) => {
+        const chronological = [...bucketTrades].sort(
+          (a, b) => safeNumber(a.closedAt) - safeNumber(b.closedAt)
+        );
+
+        let equity = 0;
+        let peak = 0;
+        let maxDrawdown = 0;
+
+        for (const trade of chronological) {
+          equity += safeNumber(trade.pnl);
+          peak = Math.max(peak, equity);
+          maxDrawdown = Math.max(maxDrawdown, peak - equity);
+        }
+
+        return {
+          ...bucket,
+          winRate: bucket.trades > 0 ? bucket.wins / bucket.trades : 0,
+          avgPips: bucket.trades > 0 ? bucket.totalPips / bucket.trades : 0,
+          expectancy: bucket.trades > 0 ? bucket.netPnl / bucket.trades : 0,
+          profitFactor:
+            bucket.grossLoss > 0
+              ? bucket.grossProfit / bucket.grossLoss
+              : bucket.grossProfit > 0
+                ? 99
+                : 1,
+          maxDrawdown,
+        };
+      };
+
+      const buildGrouped = (getKey: (trade: AnalyticsTrade) => string) => {
+        const buckets: Record<string, AnalyticsBucket> = {};
+        const groupedTrades: Record<string, AnalyticsTrade[]> = {};
+
+        for (const trade of trades) {
+          const key = getKey(trade);
+          buckets[key] ??= createBucket(key);
+          groupedTrades[key] ??= [];
+          addTrade(buckets[key], trade);
+          groupedTrades[key].push(trade);
+        }
+
+        return Object.fromEntries(
+          Object.entries(buckets).map(([key, bucket]) => [
+            key,
+            finaliseBucket(bucket, groupedTrades[key] ?? []),
+          ])
+        );
+      };
+
+      return {
+        generatedAt: new Date().toISOString(),
+        overall: finaliseBucket(
+          trades.reduce((bucket, trade) => {
+            addTrade(bucket, trade);
+            return bucket;
+          }, createBucket("OVERALL")),
+          trades
+        ),
+        bySession: buildGrouped(getSession),
+        byRegime: buildGrouped((trade) => trade.regime ?? "UNKNOWN"),
+        byPair: buildGrouped((trade) => trade.instrument ?? "UNKNOWN"),
+        byStrategy: buildGrouped((trade) => trade.strategy ?? "UNKNOWN"),
+        learningContext: {
+          version: learning.params?.version ?? 0,
+          minConfidence: learning.params?.minConfidence ?? 0,
+          totalEvolutions: learning.totalEvolutions ?? 0,
+        },
+      };
+    }),
+
 getDailyReports: publicProcedure.query(async () => {
   await dailyReportStore.load();
   return dailyReportStore.getAll();
