@@ -2493,9 +2493,7 @@ const athenaConfidence = evaluateAthenaConfidence({
     0,
     Math.min(1, 1 - (currentDrawdownPct ?? 0) / 5)
   ),
-  executionScore: executionDecision.score
-    ? executionDecision.score / 100
-    : 0.75,
+executionScore: executionDecision.score ?? 0.75,
 });
 const athenaQuality = evaluateTradeQuality({
   instrument: pairStat.instrument,
