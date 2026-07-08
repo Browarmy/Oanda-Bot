@@ -76,9 +76,10 @@ function confidenceScore(
     return rawConfidenceScore;
   }
 
+
   if (typeof calibration.calibratedScore === "number") {
-    return Math.max(0, Math.min(1, calibration.calibratedScore));
-  }
+  return Math.max(0.5, Math.min(1, calibration.calibratedScore));
+}
 
   const wr = calibration.winRate ?? 0.5;
   const pf = Math.min((calibration.profitFactor ?? 1) / 2.5, 1);
