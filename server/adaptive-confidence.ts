@@ -133,7 +133,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "STRATEGY_LEARNING",
-      adjustment: 0.02,
+      adjustment: 0.01,
       reason: "weak strategy",
       inputValue: round(strategyScore),
       currentThreshold: workingThreshold,
@@ -153,7 +153,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "REGIME_LEARNING",
-      adjustment: 0.02,
+      adjustment: 0.01,
       reason: "weak regime",
       inputValue: round(regimeScore),
       currentThreshold: workingThreshold,
