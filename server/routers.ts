@@ -29,6 +29,8 @@ import { getPersistentMemoryStatus } from "./persistent-memory";
 import { marketMemory } from "./market-memory";
 import { strategyGenome } from "./strategy-genome";
 import { strategyRegimeMatrix } from "./strategy-regime-matrix";
+import { memoryQuery } from "./memory/memory-db";
+import { getCalibrationReport } from "./memory/confidenceCalibrationTracker";
 import {
   dailyReportStore,
   formatDailyReportTelegram,
@@ -576,6 +578,49 @@ getTodayDailyReport: publicProcedure.query(async () => {
       };
     }),
 
+    getMemoryHealth: publicProcedure.query(async () => {
+      try {
+        const rows = await memoryQuery<{
+          total_observations: string | number;
+          quality_observations: string | number;
+          last_observed_at: string | null;
+        }>(
+          `
+            SELECT
+              COUNT(*) AS total_observations,
+              COUNT(*) FILTER (WHERE quality_score >= 0.7) AS quality_observations,
+              MAX(observed_at)::text AS last_observed_at
+            FROM memory_observations
+          `
+        );
+
+        const row = rows[0];
+
+        return {
+          connected: true,
+          totalObservations: Number(row?.total_observations ?? 0),
+          qualityObservations: Number(row?.quality_observations ?? 0),
+          lastObservedAt: row?.last_observed_at ?? null,
+        };
+      } catch (error) {
+        return {
+          connected: false,
+          totalObservations: 0,
+          qualityObservations: 0,
+          lastObservedAt: null,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }),
+
+    getCalibrationReport: publicProcedure.query(async () => {
+      try {
+        return await getCalibrationReport();
+      } catch {
+        return [];
+      }
+    }),
+    
     // Get learning insights (human-readable)
     getLearningInsights: publicProcedure.query(() => {
   const state = learningEngine.getState();
