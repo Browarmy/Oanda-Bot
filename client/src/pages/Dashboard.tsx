@@ -110,6 +110,9 @@ export default function Dashboard({ credentials, onLogout }: DashboardProps) {
     await utils.bot.getHistory.invalidate();
     await utils.bot.getLearningInsights.invalidate();
     await utils.bot.getMemoryDashboard.invalidate();
+    await utils.bot.getMemoryHealth.invalidate();
+    await utils.bot.getCalibrationReport.invalidate();
+    await utils.bot.getPerformanceAnalytics.invalidate();
     await utils.bot.getDecisionJournal.invalidate();
     await utils.bot.getFundedReadiness.invalidate();
   },
@@ -157,6 +160,21 @@ const { data: memoryDashboard } = trpc.bot.getMemoryDashboard.useQuery(undefined
   refetchInterval: 10000,
 });
 
+const { data: memoryHealth } = trpc.bot.getMemoryHealth.useQuery(undefined, {
+  enabled: isConnected && tab === "ai",
+  refetchInterval: 10000,
+});
+
+const { data: calibrationReport } = trpc.bot.getCalibrationReport.useQuery(undefined, {
+  enabled: isConnected && tab === "ai",
+  refetchInterval: 10000,
+});
+
+const { data: performanceAnalytics } = trpc.bot.getPerformanceAnalytics.useQuery(undefined, {
+  enabled: isConnected && tab === "ai",
+  refetchInterval: 10000,
+});
+  
 const { data: decisionJournal } = trpc.bot.getDecisionJournal.useQuery(undefined, {
   enabled: isConnected && tab === "ai",
   refetchInterval: 10000,
@@ -918,6 +936,84 @@ const dailyProfitFactor =
   </div>
 )}
 
+{memoryHealth && (
+  <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+    <SectionTitle>🧬 Phase 0 Memory Health</SectionTitle>
+
+    <div className="grid grid-cols-2 gap-3">
+      <StatPill
+        label="Memory DB"
+        value={memoryHealth.connected ? "ONLINE" : "OFFLINE"}
+        color={memoryHealth.connected ? C.green : C.red}
+        sub={memoryHealth.error ?? "PostgreSQL Memory"}
+      />
+      <StatPill
+        label="Observations"
+        value={String(memoryHealth.totalObservations ?? 0)}
+        color={C.blue}
+        sub={`${memoryHealth.qualityObservations ?? 0} quality`}
+      />
+      <StatPill
+        label="Quality Rate"
+        value={`${memoryHealth.totalObservations > 0 ? (((memoryHealth.qualityObservations ?? 0) / memoryHealth.totalObservations) * 100).toFixed(0) : "0"}%`}
+        color={C.amber}
+      />
+      <StatPill
+        label="Last Observation"
+        value={memoryHealth.lastObservedAt ? new Date(memoryHealth.lastObservedAt).toLocaleTimeString() : "—"}
+        sub={memoryHealth.lastObservedAt ? new Date(memoryHealth.lastObservedAt).toLocaleDateString() : "No Memory writes yet"}
+      />
+    </div>
+  </div>
+)}
+
+{calibrationReport && calibrationReport.length > 0 && (
+  <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+    <SectionTitle>🎯 Confidence Calibration</SectionTitle>
+
+    <div className="space-y-2">
+      {calibrationReport.map((row: any) => (
+        <div key={row.bucket} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: C.s2 }}>
+          <span className="text-sm font-bold" style={{ color: C.text }}>{row.bucket}</span>
+          <span className="text-xs font-mono" style={{ color: C.mutedLight }}>
+            {row.trades} trades · WR {(row.winRate * 100).toFixed(0)}% · PF {row.profitFactor.toFixed(2)} · R {row.averageRMultiple.toFixed(2)}
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{performanceAnalytics && (
+  <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
+    <SectionTitle>📈 Funded Performance Analytics</SectionTitle>
+
+    <div className="grid grid-cols-2 gap-3 mb-3">
+      <StatPill label="Trades" value={String(performanceAnalytics.overall?.trades ?? 0)} color={C.blue} />
+      <StatPill label="Win Rate" value={`${((performanceAnalytics.overall?.winRate ?? 0) * 100).toFixed(1)}%`} color={(performanceAnalytics.overall?.winRate ?? 0) >= 0.55 ? C.green : C.amber} />
+      <StatPill label="Profit Factor" value={(performanceAnalytics.overall?.profitFactor ?? 1).toFixed(2)} color={(performanceAnalytics.overall?.profitFactor ?? 1) >= 1.5 ? C.green : C.amber} />
+      <StatPill label="Expectancy" value={(performanceAnalytics.overall?.expectancy ?? 0).toFixed(2)} color={(performanceAnalytics.overall?.expectancy ?? 0) >= 0 ? C.green : C.red} />
+    </div>
+
+    <div className="rounded-2xl p-3" style={{ background: C.s2 }}>
+      <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: C.muted }}>
+        Session Breakdown
+      </p>
+
+      <div className="space-y-2">
+        {Object.entries(performanceAnalytics.bySession ?? {}).map(([session, row]: any) => (
+          <div key={session} className="flex items-center justify-between">
+            <span className="text-xs font-bold" style={{ color: C.text }}>{session}</span>
+            <span className="text-xs font-mono" style={{ color: C.mutedLight }}>
+              {row.trades} trades · WR {(row.winRate * 100).toFixed(0)}% · PF {row.profitFactor.toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
+            
 {decisionJournal && (
   <div className="rounded-3xl p-4" style={{ background: C.s1, border: `1px solid ${C.border}` }}>
     <SectionTitle>🧾 Decision Intelligence</SectionTitle>
