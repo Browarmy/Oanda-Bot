@@ -66,6 +66,7 @@ import { writeMemoryObservation } from "./memory/observationWriter";
 import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
 import { buildHistorianReport } from "./memory/historian";
 import { startMemoryOutcomeUpdater } from "./memory/outcomeUpdater";
+import { recordTradeCalibration } from "./memory/confidenceCalibrationTracker";
 import {
   createTradeOpportunityAudit,
   recordTradeBlock,
@@ -2924,6 +2925,16 @@ const closed: ClosedTrade = {
         const pair = this.state.pairs.find(p => p.instrument === instrument);
         if (pair) { if (won) pair.wins++; else pair.losses++; pair.totalPnl += pnl; }
         this.log(`${won ? "🏆" : "💔"} ${direction} ${instrument} | ${won ? "+" : ""}${pnl.toFixed(2)} (${pips.toFixed(1)}p) | ${closeReason}`);
+        void recordTradeCalibration({
+  instrument,
+  statedConfidence: snapSignal.confidence ?? 0.78,
+  won,
+  pips: parseFloat(pips.toFixed(1)),
+  rMultiple: snap?.stopLoss && entryPrice ? Math.abs(pips / Math.abs((entryPrice - snap.stopLoss) / pipSize)) : 0,
+  regime: snapSignal.regime ?? "UNKNOWN",
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+});
+        
         // Telegram notification for trade close
         notifyTradeClose({
           instrument, direction, units: snap?.units ?? 0,
