@@ -588,7 +588,7 @@ getTodayDailyReport: publicProcedure.query(async () => {
           `
             SELECT
               COUNT(*) AS total_observations,
-              COUNT(*) FILTER (WHERE quality_score >= 0.7) AS quality_observations,
+              COUNT(*) FILTER (WHERE memory_quality_score >= 0.7) AS quality_observations, 
               MAX(observed_at)::text AS last_observed_at
             FROM memory_observations
           `
