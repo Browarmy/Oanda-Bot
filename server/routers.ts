@@ -487,6 +487,87 @@ const hour = new Date(timestamp).getUTCHours();
       };
     }),
 
+    getRejectionAnalytics: publicProcedure.query(async () => {
+      await decisionJournal.load();
+
+      const all = decisionJournal.getAll();
+      const now = Date.now();
+      const last24h = all.filter((entry) => now - entry.time <= 24 * 60 * 60 * 1000);
+      const blocked = last24h.filter(
+        (entry) => entry.type === "BLOCKED" || entry.action === "BLOCKED"
+      );
+
+      const createCounts = () => ({
+        total: 0,
+        confidence: 0,
+        quality: 0,
+        forecast: 0,
+        h4: 0,
+        portfolio: 0,
+        execution: 0,
+        spread: 0,
+        safety: 0,
+        learning: 0,
+        news: 0,
+        expectedValue: 0,
+        neural: 0,
+        executive: 0,
+        other: 0,
+      });
+
+      const counts = createCounts();
+
+      const classify = (entry: any): keyof ReturnType<typeof createCounts> => {
+        const stage = String(entry.stage ?? "").toUpperCase();
+        const reason = String(entry.reason ?? "").toUpperCase();
+
+        if (reason.includes("CONFIDENCE")) return "confidence";
+        if (reason.includes("QUALITY") || reason.includes("NEREQO CONFIDENCE")) return "quality";
+        if (reason.includes("FORECAST")) return "forecast";
+        if (reason.includes("H4") || reason.includes("COUNTER-TREND")) return "h4";
+        if (stage === "PORTFOLIO" || reason.includes("PORTFOLIO") || reason.includes("EXPOSURE")) return "portfolio";
+        if (stage === "EXECUTION" || reason.includes("EXECUTION") || reason.includes("PULLBACK")) return "execution";
+        if (reason.includes("SPREAD")) return "spread";
+        if (reason.includes("SAFETY")) return "safety";
+        if (reason.includes("LEARNING")) return "learning";
+        if (reason.includes("NEWS")) return "news";
+        if (reason.includes("EXPECTED VALUE") || reason.includes("EV")) return "expectedValue";
+        if (reason.includes("NEURAL")) return "neural";
+        if (reason.includes("EXECUTIVE")) return "executive";
+
+        return "other";
+      };
+
+      for (const entry of blocked) {
+        const key = classify(entry);
+        counts.total += 1;
+        counts[key] += 1;
+      }
+
+      return {
+        generatedAt: new Date().toISOString(),
+        windowHours: 24,
+        totalDecisions: last24h.length,
+        blockedDecisions: blocked.length,
+        blockRate: last24h.length > 0 ? blocked.length / last24h.length : 0,
+        counts,
+        recentBlocks: blocked
+          .slice(-25)
+          .reverse()
+          .map((entry) => ({
+            time: new Date(entry.time).toISOString(),
+            instrument: entry.instrument,
+            direction: entry.direction,
+            stage: entry.stage ?? "UNKNOWN",
+            reason: entry.reason,
+            confidence: entry.confidence ?? null,
+            metaScore: entry.metaScore ?? null,
+            strategy: entry.strategy ?? null,
+            regime: entry.regime ?? null,
+          })),
+      };
+    }),
+    
 getDailyReports: publicProcedure.query(async () => {
   await dailyReportStore.load();
   return dailyReportStore.getAll();
