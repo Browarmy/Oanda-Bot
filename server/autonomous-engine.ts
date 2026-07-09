@@ -66,6 +66,8 @@ import { writeMemoryObservation } from "./memory/observationWriter";
 import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
 import { buildHistorianReport } from "./memory/historian";
 import { startMemoryOutcomeUpdater } from "./memory/outcomeUpdater";
+import { startMemoryOutcomeUpdater } from "./memory/outcomeUpdater";
+import { recordTradeCalibration } from "./memory/confidenceCalibrationTracker";
 import {
   createTradeOpportunityAudit,
   recordTradeBlock,
@@ -2918,6 +2920,15 @@ const closed: ClosedTrade = {
   strategy: snapSignal.strategy ?? "UNKNOWN",
 };
         this.state.tradeHistory.unshift(closed);
+        void recordTradeCalibration({
+  instrument,
+  statedConfidence: snapSignal.confidence ?? 0,
+  won,
+  pips: closed.pips,
+  rMultiple: closed.pips / 15,
+  regime: snapSignal.regime ?? "UNKNOWN",
+  strategy: snapSignal.strategy ?? "UNKNOWN",
+});
         if (this.state.tradeHistory.length > 1000) this.state.tradeHistory.pop();
         if (won) this.state.totalWins++; else this.state.totalLosses++;
         this.state.totalPnl += pnl;
