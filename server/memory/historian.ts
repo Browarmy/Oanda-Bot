@@ -44,6 +44,7 @@ export type HistorianReport =
         UNKNOWN: number;
       };
       averageConfidenceInSimilarStates: number | null;
+      historianConfidenceAdjustment: number;
       message: string;
     };
 
@@ -112,7 +113,7 @@ async function getMemoryDepth(instrument: string): Promise<{
 
   return {
     totalObservations: Number(rows[0]?.total_observations ?? 0),
-    qualityObservations: Number(rows[0]?.quality_observations ?? 0),
+    qualityObservations: Number(rows[0]?.qualityObservations ?? 0),
   };
 }
 
@@ -155,6 +156,50 @@ function averageConfidence(confidenceScores: Array<number | null>): number | nul
   return roundPercent(total / validScores.length);
 }
 
+/**
+ * Calculate confidence adjustment based on historical decision agreement
+ * @param distribution - Historical decision distribution percentages
+ * @param decisionMade - Our current decision (BUY, SELL, WAIT)
+ * @param similarStatesFound - Number of similar past states found
+ * @returns Confidence adjustment between -0.05 and +0.05
+ */
+function calculateHistorianConfidenceAdjustment(
+  distribution: { BUY: number; SELL: number; WAIT: number; UNKNOWN: number },
+  decisionMade: HistoricalDecision,
+  similarStatesFound: number
+): number {
+  if (decisionMade === "UNKNOWN") return 0;
+
+  const decisionPercentage = (distribution[decisionMade] ?? 0) / 100;
+
+  // Strong agreement: similar past states favored this decision 70%+ AND we have 8+ similar states
+  if (decisionPercentage >= 0.70 && similarStatesFound >= 8) {
+    return 0.04; // +4% confidence boost
+  }
+
+  // Moderate agreement: 55-70% AND 10+ similar states
+  if (decisionPercentage >= 0.55 && similarStatesFound >= 10) {
+    return 0.02; // +2% confidence boost
+  }
+
+  // Weak agreement: 45-55% (no adjustment)
+  if (decisionPercentage >= 0.45 && decisionPercentage < 0.55) {
+    return 0;
+  }
+
+  // Significant disagreement: past states contradict us (< 40%) AND we have 5+ similar states
+  if (decisionPercentage < 0.40 && similarStatesFound >= 5) {
+    return -0.05; // -5% confidence penalty
+  }
+
+  // Moderate disagreement: 40-45% AND 8+ similar states
+  if (decisionPercentage < 0.45 && decisionPercentage >= 0.40 && similarStatesFound >= 8) {
+    return -0.02; // -2% confidence penalty
+  }
+
+  return 0;
+}
+
 export async function buildHistorianReport(input: HistorianInput): Promise<HistorianReport> {
   const instrument = input.instrument.trim().toUpperCase();
 
@@ -194,6 +239,30 @@ export async function buildHistorianReport(input: HistorianInput): Promise<Histo
     };
   });
 
+  const decisionDistribution = buildDecisionDistribution(
+    analogues.map((analogue) => analogue.decisionMade)
+  );
+
+  // Determine the most likely decision from historical data
+  const decisions = analogues.map(a => a.decisionMade);
+  let mostLikelyDecision: HistoricalDecision = "UNKNOWN";
+  let maxCount = 0;
+  const counts: Record<HistoricalDecision, number> = { BUY: 0, SELL: 0, WAIT: 0, UNKNOWN: 0 };
+  
+  for (const decision of decisions) {
+    counts[decision] = (counts[decision] ?? 0) + 1;
+    if (counts[decision] > maxCount) {
+      maxCount = counts[decision];
+      mostLikelyDecision = decision;
+    }
+  }
+
+  const historianConfidenceAdjustment = calculateHistorianConfidenceAdjustment(
+    decisionDistribution,
+    mostLikelyDecision,
+    similarObservations.length
+  );
+
   return {
     status: "ready",
     instrument,
@@ -201,13 +270,12 @@ export async function buildHistorianReport(input: HistorianInput): Promise<Histo
     qualityObservations: memoryDepth.qualityObservations,
     similarStatesFound: similarObservations.length,
     topAnalogues: analogues.slice(0, 3),
-    historicalDecisionDistribution: buildDecisionDistribution(
-      analogues.map((analogue) => analogue.decisionMade)
-    ),
+    historicalDecisionDistribution: decisionDistribution,
     averageConfidenceInSimilarStates: averageConfidence(
       analogues.map((analogue) => analogue.confidenceScore)
     ),
+    historianConfidenceAdjustment,
     message:
-      "Historian v1 report generated for observation and logging only. No decision blocking or confidence modification applied.",
+      "Historian v1 report generated. Confidence adjustment computed and ready for Athena integration.",
   };
 }
