@@ -1358,29 +1358,23 @@ if (historianReport.status === "insufficient_memory_depth") {
   this.log(`📜 HISTORIAN: ${pairStat.instrument} insufficient Memory depth — ${historianReport.similarStatesFound}/${historianReport.minimumRequired} similar states`);
 } else {
   const topAnalogue = historianReport.topAnalogues[0];
+  const dist = historianReport.historicalDecisionDistribution;
 
   this.log(
     `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
     `top=${topAnalogue.similarityScore} ${topAnalogue.decisionMade} | ` +
-    `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
-    `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
-    `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
+    `BUY ${dist.BUY}% / SELL ${dist.SELL}% / WAIT ${dist.WAIT}%`
   );
 
-  // ── HISTORIAN CONFIDENCE ADJUSTMENT ───────────────────────────────────────
-  if (historianReport.similarStatesFound >= 10) {
-    const dist = historianReport.historicalDecisionDistribution;
-    const currentDirPct = finalAction === "BUY" 
-      ? dist.BUY 
-      : finalAction === "SELL" 
-        ? dist.SELL 
-        : dist.WAIT;
-    
+  // ── HISTORIAN CONFIDENCE ADJUSTMENT ─────────────────────────────────────
+  if (historianReport.similarStatesFound >= 10 && finalAction !== "WAIT") {
+    const currentDirPct = finalAction === "BUY" ? dist.BUY : dist.SELL;
+
     let histAdj = 0;
-    if (currentDirPct > 60) histAdj = 0.035;           // strong historical support
-    else if (currentDirPct < 25) histAdj = -0.05;      // strong historical contra-signal
-    else if (currentDirPct > 45) histAdj = 0.015;      // mild support
-    
+    if (currentDirPct > 60) histAdj = 0.035;
+    else if (currentDirPct < 25) histAdj = -0.05;
+    else if (currentDirPct > 45) histAdj = 0.015;
+
     if (histAdj !== 0) {
       const before = finalConfidence;
       finalConfidence = Math.min(Math.max(finalConfidence + histAdj, 0), 0.99);
@@ -1388,16 +1382,8 @@ if (historianReport.status === "insufficient_memory_depth") {
       finalReason = `[HIST✓] ${finalReason}`;
     }
   }
-} const topAnalogue = historianReport.topAnalogues[0];
-
-  this.log(
-    `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
-    `top=${topAnalogue.similarityScore} ${topAnalogue.decisionMade} | ` +
-    `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
-    `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
-    `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
-  );
 }
+
   }
 } catch (error) {
   this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
