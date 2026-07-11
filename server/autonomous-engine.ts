@@ -1354,6 +1354,29 @@ const historianReport = await buildHistorianReport({
 if (historianReport.status === "insufficient_memory_depth") {
   this.log(`📜 HISTORIAN: ${pairStat.instrument} insufficient Memory depth — ${historianReport.similarStatesFound}/${historianReport.minimumRequired} similar states`);
 } else {
+// ── HISTORIAN CONFIDENCE ADJUSTMENT ───────────────────────────────────────
+if (historianReport.status !== "insufficient_memory_depth" && historianReport.similarStatesFound >= 10) {
+  const top = historianReport.topAnalogues[0];
+  const dist = historianReport.historicalDecisionDistribution;
+  const currentDirPct = finalAction === "BUY" 
+    ? dist.BUY 
+    : finalAction === "SELL" 
+      ? dist.SELL 
+      : dist.WAIT;
+  
+  let histAdj = 0;
+  if (currentDirPct > 60) histAdj = 0.035;           // strong historical support
+  else if (currentDirPct < 25) histAdj = -0.05;      // strong historical contra-signal
+  else if (currentDirPct > 45) histAdj = 0.015;      // mild support
+  
+  if (histAdj !== 0) {
+    const before = finalConfidence;
+    finalConfidence = Math.min(Math.max(finalConfidence + histAdj, 0), 0.99);
+    this.log(`📜 HISTORIAN ADJUST: ${pairStat.instrument} ${finalAction} — ${currentDirPct}% historical | ${(before*100).toFixed(0)}% → ${(finalConfidence*100).toFixed(0)}%`);
+    
+    finalReason = `[HIST✓] ${finalReason}`;
+  }
+}
   const topAnalogue = historianReport.topAnalogues[0];
 
   this.log(
@@ -1629,17 +1652,18 @@ if (portfolioManager.adjustedConfidence !== finalConfidence) {
           this.log(`🎯 ${pairStat.instrument} — ${sweep.reason} — agrees with ${finalAction} (+${(sweep.confidence*10).toFixed(0)}% conf)`);
         } else if (sweepContra) {
           // Sweep contradicts direction — strong warning, reduce conf significantly
-          finalConfidence = Math.max(finalConfidence - 0.08, 0);
+          finalConfidence = Math.max(finalConfidence - (sweep.confidence * 0.08), 0);
           this.log(`⚠ ${pairStat.instrument} — ${sweep.reason} — contradicts ${finalAction} (-8% conf)`);
         }
       }
 
       // ── SESSION-STRATEGY ALIGNMENT — boost when strategy fits session ─────────
-      const sessionCtx = getSessionContext(utcHour);
+            const sessionCtx = getSessionContext(utcHour);
       const sessionAdj = applySessionAdjustment({ ...pairStat.lastSignal, strategy: stratSignal.strategy } as any, sessionCtx);
-      finalConfidence = Math.min(Math.max(sessionAdj.adjustedConfidence, 0), 0.99);
-      this.log(`${sessionAdj.sessionNote} [${pairStat.instrument}]`);
-
+      // Preserve all prior adjustments; apply only delta
+      const baseForSession = finalConfidence;
+      finalConfidence = Math.min(Math.max(finalConfidence + (sessionAdj.adjustedConfidence - (pairStat.lastSignal?.confidence ?? finalConfidence)), 0), 0.99);
+      this.log(`${sessionAdj.sessionNote} [${pairStat.instrument}] (session delta applied to accumulated conf)`);
       // ── ADAPTIVE CONFIDENCE THRESHOLD V1 ───────────────────────────────────────
 const thresholdStrategy = stratSignal.strategy ?? "UNKNOWN";
 const thresholdRegime = regime.regime ?? "UNKNOWN";
@@ -1662,7 +1686,8 @@ const adaptiveThreshold = calculateAdaptiveConfidenceThreshold({
   riskMood: regime.riskMood,
 });
 
-if (finalConfidence < adaptiveThreshold.threshold) {
+const displayConfidence = Math.round(finalConfidence * 100) / 100;
+if (displayConfidence < adaptiveThreshold.threshold) {
   this.log(
     `🎚️ CONFIDENCE BLOCK: ${pairStat.instrument} ${finalAction} — ` +
     `${(finalConfidence * 100).toFixed(0)}% < ` +
