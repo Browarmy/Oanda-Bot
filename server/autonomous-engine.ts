@@ -1356,30 +1356,38 @@ const historianReport = await buildHistorianReport({
 if (historianReport.status === "insufficient_memory_depth") {
   this.log(`📜 HISTORIAN: ${pairStat.instrument} insufficient Memory depth — ${historianReport.similarStatesFound}/${historianReport.minimumRequired} similar states`);
 } else {
-// ── HISTORIAN CONFIDENCE ADJUSTMENT ───────────────────────────────────────
-if (historianReport.status !== "insufficient_memory_depth" && historianReport.similarStatesFound >= 10) {
-  const top = historianReport.topAnalogues[0];
-  const dist = historianReport.historicalDecisionDistribution;
-  const currentDirPct = finalAction === "BUY" 
-    ? dist.BUY 
-    : finalAction === "SELL" 
-      ? dist.SELL 
-      : dist.WAIT;
-  
-  let histAdj = 0;
-  if (currentDirPct > 60) histAdj = 0.035;           // strong historical support
-  else if (currentDirPct < 25) histAdj = -0.05;      // strong historical contra-signal
-  else if (currentDirPct > 45) histAdj = 0.015;      // mild support
-  
-  if (histAdj !== 0) {
-    const before = finalConfidence;
-    finalConfidence = Math.min(Math.max(finalConfidence + histAdj, 0), 0.99);
-    this.log(`📜 HISTORIAN ADJUST: ${pairStat.instrument} ${finalAction} — ${currentDirPct}% historical | ${(before*100).toFixed(0)}% → ${(finalConfidence*100).toFixed(0)}%`);
-    
-    finalReason = `[HIST✓] ${finalReason}`;
-  }
-}
   const topAnalogue = historianReport.topAnalogues[0];
+
+  this.log(
+    `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
+    `top=${topAnalogue.similarityScore} ${topAnalogue.decisionMade} | ` +
+    `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
+    `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
+    `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
+  );
+
+  // ── HISTORIAN CONFIDENCE ADJUSTMENT ───────────────────────────────────────
+  if (historianReport.similarStatesFound >= 10) {
+    const dist = historianReport.historicalDecisionDistribution;
+    const currentDirPct = finalAction === "BUY" 
+      ? dist.BUY 
+      : finalAction === "SELL" 
+        ? dist.SELL 
+        : dist.WAIT;
+    
+    let histAdj = 0;
+    if (currentDirPct > 60) histAdj = 0.035;           // strong historical support
+    else if (currentDirPct < 25) histAdj = -0.05;      // strong historical contra-signal
+    else if (currentDirPct > 45) histAdj = 0.015;      // mild support
+    
+    if (histAdj !== 0) {
+      const before = finalConfidence;
+      finalConfidence = Math.min(Math.max(finalConfidence + histAdj, 0), 0.99);
+      this.log(`📜 HISTORIAN ADJUST: ${pairStat.instrument} ${finalAction} — ${currentDirPct}% historical | ${(before*100).toFixed(0)}% → ${(finalConfidence*100).toFixed(0)}%`);
+      finalReason = `[HIST✓] ${finalReason}`;
+    }
+  }
+}  const topAnalogue = historianReport.topAnalogues[0];
 
   this.log(
     `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
