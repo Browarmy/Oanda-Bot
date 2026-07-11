@@ -1141,8 +1141,11 @@ private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
       const isJpy = pairStat.instrument.includes("JPY");
 const pipSize = getPipSize(pairStat.instrument);
 const spreadPips = pipSize > 0 ? pairStat.spread / pipSize : 0;
-    if (spreadPips > this.state.config.maxSpreadPips) {
-  this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${this.state.config.maxSpreadPips}p — SKIP`);
+const isPeakSession = ["LONDON", "NEW_YORK", "LONDON_NY"].includes(this.state.currentSession);
+const effectiveMaxSpread = isPeakSession ? this.state.config.maxSpreadPips : 6.0;
+
+if (spreadPips > effectiveMaxSpread) {
+  this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${effectiveMaxSpread}p (${this.state.currentSession}) — SKIP`);
   if (this.currentAudit) recordTradeBlock(this.currentAudit, "SPREAD");
   return;
 }
