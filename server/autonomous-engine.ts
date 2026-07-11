@@ -1141,10 +1141,12 @@ private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
       const isJpy = pairStat.instrument.includes("JPY");
 const pipSize = getPipSize(pairStat.instrument);
 const spreadPips = pipSize > 0 ? pairStat.spread / pipSize : 0;
-    if (spreadPips > this.state.config.maxSpreadPips) {
-  this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${this.state.config.maxSpreadPips}p — SKIP`);
-  if (this.currentAudit) recordTradeBlock(this.currentAudit, "SPREAD");
-  return;
+const isPeakSession = ["LONDON", "NEW_YORK", "LONDON_NY"].includes(this.state.currentSession);
+const effectiveMaxSpread = isPeakSession ? 5.0 : 8.0;  // relaxed for practice
+
+if (spreadPips > effectiveMaxSpread) {
+  this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${effectiveMaxSpread}p (${this.state.currentSession}) — SKIP`);
+  ...
 }
 
       // ── Portfolio heat guard: max 4% total open risk ──────────────────────────
