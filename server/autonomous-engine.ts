@@ -1335,7 +1335,7 @@ await writeMemoryObservation({
       memoryMomentumDirection: memoryInput.momentumDirection,
       memoryTrendDirection: memoryInput.trendDirection,
     },
-dnaVector: memoryDnaVector,
+    dnaVector: memoryDnaVector,
     source: "autonomous_engine",
     timeframe: "M15",
     decisionContext: {
@@ -1348,6 +1348,7 @@ dnaVector: memoryDnaVector,
       spreadPips,
     },
   });
+
 const historianReport = await buildHistorianReport({
   instrument: pairStat.instrument,
   dnaVector: memoryDnaVector,
@@ -1387,7 +1388,7 @@ if (historianReport.status === "insufficient_memory_depth") {
       finalReason = `[HIST✓] ${finalReason}`;
     }
   }
-}  const topAnalogue = historianReport.topAnalogues[0];
+} const topAnalogue = historianReport.topAnalogues[0];
 
   this.log(
     `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
