@@ -1325,7 +1325,9 @@ try {
     direction: finalAction,
   } as const;
 
+try {
 const memoryDnaVector = encodeMarketStateToDnaVector(memoryInput);
+
 
 await writeMemoryObservation({
     instrument: pairStat.instrument,
