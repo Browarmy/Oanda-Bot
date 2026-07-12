@@ -286,7 +286,7 @@ const DEFAULT_CONFIG: BotConfig = {
     "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", "AUD_USD",
     "USD_CAD", "EUR_GBP", "EUR_JPY", "GBP_JPY", "XAU_USD",
   ],
-maxSpreadPips: 3.5,           // practice account spread tolerance
+maxSpreadPips: 5.0,           // practice account spread tolerance
   minRRRatio: 2.0,              // 2:1 RR minimum (was 1.8)
   trailingStopEnabled: true,
   trailingStopAtr: 1.0,
@@ -771,7 +771,7 @@ await strategyRegimeMatrix.load();
     this.state.config.slAtrMultiplier = lp.atrSlMultiplier;
     this.state.config.tpAtrMultiplier = lp.atrTpMultiplier;
     this.state.config.minConfidence = lp.minConfidence;
-this.state.config.maxSpreadPips = Math.max(3.5, lp.maxSpreadPips ?? 3.5);
+state.config.maxSpreadPips = Math.max(5.0, lp.maxSpreadPips ?? 5.0);
     this.log(`🧠 Loaded learned params v${lp.version}: RSI ${lp.rsiLower.toFixed(0)}-${lp.rsiUpper.toFixed(0)}, SL ${lp.atrSlMultiplier.toFixed(2)}x, Conf ${(lp.minConfidence*100).toFixed(0)}%`);
 
     try {
