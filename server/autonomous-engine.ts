@@ -1325,7 +1325,6 @@ try {
     direction: finalAction,
   } as const;
 
-try {
 const memoryDnaVector = encodeMarketStateToDnaVector(memoryInput);
 
 
@@ -1393,6 +1392,7 @@ if (historianReport.status !== "insufficient_memory_depth" && historianReport.si
     `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
   );
 }
+  }
 } catch (error) {
 
   this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
