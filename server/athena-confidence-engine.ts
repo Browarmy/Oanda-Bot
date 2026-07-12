@@ -118,11 +118,11 @@ export function evaluateAthenaConfidence(
     else if(confidence>=0.60) grade="D";
     else grade="F";
 
-    const approved=confidence>=0.75;
+    const approved=confidence>=0.70;
 
     const expectedEdgeR=(confidence-0.5)*4;
 
-    const reasons:string=[];
+const reasons:string[]=[];
 
     if((input.memoryScore ?? .5)>0.7)
         reasons.push("Strong historical memory");
