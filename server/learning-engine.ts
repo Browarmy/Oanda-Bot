@@ -155,7 +155,7 @@ const DEFAULT_PARAMS: SignalParams = {
   atrSlMultiplier: 1.5,
   atrTpMultiplier: 3.0,
   minSignals: 4,
-  minConfidence: 0.78,
+  minConfidence: 0.76,
   maxSpreadPips: 2.0,
   riskPercent: 1.0,
   version: 1,
