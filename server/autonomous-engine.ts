@@ -2368,13 +2368,15 @@ const units = calculateUnits(
 
 // ── PORTFOLIO INTELLIGENCE V1 ───────────────────────────────────────────────
 const portfolioCheck = analysePortfolioIntelligence(
-  openTrades.map(t => ({
-    instrument: t.instrument,
-    direction: t.direction,
-    units: t.units,
-    entryPrice: t.entryPrice,
-    stopLoss: t.stopLoss,
-  })),
+openTrades.map(t => ({
+  instrument: t.instrument,
+  direction: t.direction,
+  units: t.units,
+  entryPrice: t.entryPrice,
+  stopLoss: t.stopLoss,
+  riskPct: t.riskPct,
+})),
+
   {
     instrument: pairStat.instrument,
     direction: finalAction,
