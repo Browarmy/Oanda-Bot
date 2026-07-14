@@ -192,7 +192,10 @@ export interface OpenTrade {
 
   };
 
+  riskPct?: number;
+
 }
+
 
 interface PairStats {
   instrument: string;
@@ -2365,13 +2368,15 @@ const units = calculateUnits(
 
 // ── PORTFOLIO INTELLIGENCE V1 ───────────────────────────────────────────────
 const portfolioCheck = analysePortfolioIntelligence(
-  openTrades.map(t => ({
-    instrument: t.instrument,
-    direction: t.direction,
-    units: t.units,
-    entryPrice: t.entryPrice,
-    stopLoss: t.stopLoss,
-  })),
+openTrades.map(t => ({
+  instrument: t.instrument,
+  direction: t.direction,
+  units: t.units,
+  entryPrice: t.entryPrice,
+  stopLoss: t.stopLoss,
+  riskPct: t.riskPct,
+})),
+
   {
     instrument: pairStat.instrument,
     direction: finalAction,
@@ -2827,7 +2832,9 @@ this.openTradeSnapshots.set(tradeId, {
   takeProfit: tp,
   openTime: Date.now(),
   unrealisedPnl: 0,
+  riskPct: effectiveRiskPct,
 });
+
 
 const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
 

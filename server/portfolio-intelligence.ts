@@ -6,7 +6,9 @@ export interface PortfolioTrade {
   units: number;
   entryPrice: number;
   stopLoss: number;
+  riskPct?: number;
 }
+
 
 export interface PortfolioIntelligenceConfig {
   maxPortfolioHeatPct: number;
@@ -54,11 +56,13 @@ function splitInstrument(instrument: string): { base: string; quote: string } {
   };
 }
 
-function tradeRiskValue(trade: PortfolioTrade): number {
-  if (!trade.stopLoss || trade.stopLoss <= 0) return 0;
-
-  return Math.abs(trade.entryPrice - trade.stopLoss) * Math.abs(trade.units);
+function tradeRiskValue(trade: PortfolioTrade, equity: number): number {
+  if (trade.riskPct != null && trade.riskPct > 0 && equity > 0) {
+    return (trade.riskPct / 100) * equity;
+  }
+  return 0;
 }
+
 
 function tradeNotionalValue(trade: PortfolioTrade): number {
   return Math.abs(trade.entryPrice * trade.units);
@@ -104,12 +108,12 @@ export function analysePortfolioIntelligence(
 
   const allCurrentTrades = openTrades ?? [];
 
-  const currentRisk = allCurrentTrades.reduce(
-    (sum, trade) => sum + tradeRiskValue(trade),
-    0
-  );
+const currentRisk = allCurrentTrades.reduce(
+  (sum, trade) => sum + tradeRiskValue(trade, equity),
+  0
+);
+const proposedRisk = tradeRiskValue(proposedTrade, equity);
 
-  const proposedRisk = tradeRiskValue(proposedTrade);
   const projectedRisk = currentRisk + proposedRisk;
 
   const currentHeatPct =
