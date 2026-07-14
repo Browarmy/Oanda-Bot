@@ -192,7 +192,10 @@ export interface OpenTrade {
 
   };
 
+  riskPct?: number;
+
 }
+
 
 interface PairStats {
   instrument: string;
@@ -2827,7 +2830,9 @@ this.openTradeSnapshots.set(tradeId, {
   takeProfit: tp,
   openTime: Date.now(),
   unrealisedPnl: 0,
+  riskPct: effectiveRiskPct,
 });
+
 
 const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
 
