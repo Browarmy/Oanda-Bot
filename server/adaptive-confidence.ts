@@ -195,7 +195,7 @@ export function calculateAdaptiveConfidenceThreshold(
     workingThreshold = addContribution({
       contributions,
       source: "RISK_MOOD",
-      adjustment: 0.03,
+      adjustment: 0.01,
       reason: "hot market",
       inputValue: riskMood,
       currentThreshold: workingThreshold,
