@@ -113,12 +113,13 @@ export function evaluateAthenaConfidence(
     else if(confidence>=0.85) grade="A-";
     else if(confidence>=0.80) grade="B+";
     else if(confidence>=0.75) grade="B";
-    else if(confidence>=0.70) grade="C+";
+    else if(confidence>=0.62) grade="C+";
     else if(confidence>=0.65) grade="C";
     else if(confidence>=0.60) grade="D";
     else grade="F";
 
-    const approved=confidence>=0.70;
+    const approved=confidence>=0.62;
+
 
     const expectedEdgeR=(confidence-0.5)*4;
 
