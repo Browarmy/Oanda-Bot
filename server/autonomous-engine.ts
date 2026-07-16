@@ -1146,9 +1146,9 @@ private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
 const pipSize = getPipSize(pairStat.instrument);
 const spreadPips = pipSize > 0 ? pairStat.spread / pipSize : 0;
 const isPeakSession = ["LONDON", "NEW_YORK", "LONDON_NY"].includes(this.state.currentSession);
-const effectiveMaxSpread = isPeakSession ? this.state.config.maxSpreadPips : 6.0;
+const effectiveMaxSpread = isPeakSession ? 6.0 : 10.0;
 
-if (spreadPips > effectiveMaxSpread) {
+if (spreadPips > effectiveMaxSpread.) {
   this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${effectiveMaxSpread}p (${this.state.currentSession}) — SKIP`);
   if (this.currentAudit) recordTradeBlock(this.currentAudit, "SPREAD");
   return;
@@ -1307,7 +1307,6 @@ if (finalAction !== "WAIT") {
 }
 
 try {
-  if (pairStat.instrument === "EUR_USD") {
   const memoryNewsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
   const memoryUpcomingNews = newsGuard.getUpcomingEvents(pairStat.instrument);
   const memorySessionContext = getSessionContext(utcHour);
@@ -1393,13 +1392,13 @@ if (historianReport.status !== "insufficient_memory_depth" && historianReport.si
     `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
     `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
     `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
-  );
+   );
 }
-  }
 } catch (error) {
 
   this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
 }
+
 
                if (finalAction === "WAIT") {
         // === SAFE DETAILED REJECTION LOGGING ===
