@@ -112,8 +112,8 @@ async function getMemoryDepth(instrument: string): Promise<{
   );
 
   return {
-    totalObservations: Number(rows[0]?.total_observations ?? 0),
-    qualityObservations: Number(rows[0]?.qualityObservations ?? 0),
+       totalObservations: Number(rows[0]?.total_observations ?? 0),
+    qualityObservations: Number(rows[0]?.quality_observations ?? 0),
   };
 }
 
