@@ -66,6 +66,7 @@ import { writeMemoryObservation } from "./memory/observationWriter";
 import { encodeMarketStateToDnaVector } from "./memory/dnaEncoder";
 import { buildHistorianReport } from "./memory/historian";
 import { startMemoryOutcomeUpdater } from "./memory/outcomeUpdater";
+import { linkTradeOutcomeToObservation } from "./memory/tradeOutcomeLinker";
 import { recordTradeCalibration } from "./memory/confidenceCalibrationTracker";
 import {
   createTradeOpportunityAudit,
@@ -194,7 +195,10 @@ export interface OpenTrade {
 
   riskPct?: number;
 
+  memoryObservationId?: string | null;
+
 }
+
 
 
 interface PairStats {
@@ -1306,6 +1310,8 @@ if (finalAction !== "WAIT") {
   );
 }
 
+let memoryObservationId: string | null = null;
+
 try {
   const memoryNewsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
   const memoryUpcomingNews = newsGuard.getUpcomingEvents(pairStat.instrument);
@@ -1352,7 +1358,10 @@ dnaVector: memoryDnaVector,
       strategy: stratSignal.strategy,
       spreadPips,
     },
+  }).then((result) => {
+    memoryObservationId = result.observation.id;
   });
+
 const historianReport = await buildHistorianReport({
   instrument: pairStat.instrument,
   dnaVector: memoryDnaVector,
@@ -2832,7 +2841,9 @@ this.openTradeSnapshots.set(tradeId, {
   openTime: Date.now(),
   unrealisedPnl: 0,
   riskPct: effectiveRiskPct,
+  memoryObservationId,
 });
+
 
 
 const dp = isCrypto ? 2 : isIndex ? 1 : isGold ? 3 : isJpy ? 3 : 5;
@@ -2962,15 +2973,44 @@ const closed: ClosedTrade = {
         const pair = this.state.pairs.find(p => p.instrument === instrument);
         if (pair) { if (won) pair.wins++; else pair.losses++; pair.totalPnl += pnl; }
         this.log(`${won ? "🏆" : "💔"} ${direction} ${instrument} | ${won ? "+" : ""}${pnl.toFixed(2)} (${pips.toFixed(1)}p) | ${closeReason}`);
+
+        // R-multiple: signed (positive = win, negative = loss) — pips is
+        // already signed relative to trade direction, stopDistance is a
+        // plain positive distance, so dividing preserves the sign correctly.
+        const stopDistance = snap?.stopLoss && entryPrice
+          ? Math.abs(entryPrice - snap.stopLoss) / pipSize
+          : 0;
+        const rMultiple = stopDistance > 0 ? pips / stopDistance : 0;
+
         void recordTradeCalibration({
   instrument,
   statedConfidence: snapSignal.confidence ?? 0.78,
   won,
   pips: parseFloat(pips.toFixed(1)),
-  rMultiple: snap?.stopLoss && entryPrice ? Math.abs(pips / Math.abs((entryPrice - snap.stopLoss) / pipSize)) : 0,
+  rMultiple,
   regime: snapSignal.regime ?? "UNKNOWN",
   strategy: snapSignal.strategy ?? "UNKNOWN",
 });
+
+        // Link the real, realized outcome back to the exact memory
+        // observation written when this trade's signal fired — replaces
+        // the price-drift proxy with ground truth for this row. Falls
+        // through silently if there's no linked observation (memory write
+        // failed at signal time, or the bot restarted while this trade was
+        // open and lost the in-memory snapshot) — that row still gets
+        // resolved later by the price-drift updater as a fallback.
+        if (snap?.memoryObservationId) {
+          void linkTradeOutcomeToObservation({
+            observationId: snap.memoryObservationId,
+            won,
+            pnl,
+            pips: parseFloat(pips.toFixed(1)),
+            rMultiple,
+            closeReason,
+            closedAt: closed.closedAt,
+          });
+        }
+
         
         // Telegram notification for trade close
         notifyTradeClose({
