@@ -122,7 +122,6 @@ export function evaluateAthenaConfidence(
     // this gate runs after ~20 other gates that already filter for quality, so it isn't
     // meant to be a primary bar. It previously got silently raised to 0.70 as a side effect
     // of fixing the grade ladder's ordering bug (C+ was unreachable) — those are now separate.
-    const approved=confidence>=APPROVAL_THRESHOLD;
 
 
     const expectedEdgeR=(confidence-0.5)*4;
