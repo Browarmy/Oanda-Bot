@@ -704,8 +704,15 @@ export function checkCorrelationConflict(
 // ─── Portfolio Heat ───────────────────────────────────────────────────────────
 // Total risk = sum of (SL distance * units) for all open trades / equity
 
+// Rough JPY/USD rate used only for cross pairs quoted in JPY with no USD
+// leg (e.g. EUR_JPY, GBP_JPY) — calcPortfolioHeat has no access to a live
+// USD_JPY rate today. Getting this within ~20% is enough to make the 4%
+// heat cap meaningful; it doesn't need to be exact. Revisit if JPY moves
+// far outside its recent historical range.
+const APPROX_JPY_PER_USD = 150;
+
 export function calcPortfolioHeat(
-  openTrades: { entryPrice: number; stopLoss: number; units: number }[],
+  openTrades: { entryPrice: number; stopLoss: number; units: number; instrument: string }[],
   equity: number
 ): number {
   if (equity <= 0) return 0;
@@ -713,11 +720,34 @@ export function calcPortfolioHeat(
   for (const t of openTrades) {
     if (t.stopLoss <= 0) continue;
     const slDist = Math.abs(t.entryPrice - t.stopLoss);
-    // Approximate: risk in account currency ≈ slDist * units (for FX majors)
-    totalRisk += slDist * t.units;
+    const riskInQuoteCurrency = slDist * t.units;
+
+    const [base, quote] = t.instrument.split("_");
+    let riskInUsd: number;
+
+    if (quote === "USD") {
+      // XXX_USD — quote currency already matches account currency.
+      riskInUsd = riskInQuoteCurrency;
+    } else if (base === "USD") {
+      // USD_XXX (e.g. USD_JPY, USD_CHF, USD_CAD) — entryPrice IS the
+      // quote-currency-per-USD rate, so this converts cleanly.
+      riskInUsd = riskInQuoteCurrency / t.entryPrice;
+    } else if (quote === "JPY") {
+      // Cross pair quoted in JPY with no USD leg (EUR_JPY, GBP_JPY, etc.)
+      riskInUsd = riskInQuoteCurrency / APPROX_JPY_PER_USD;
+    } else {
+      // Remaining crosses (EUR_GBP, EUR_CHF, GBP_CHF, EUR_AUD, ...) — quote
+      // currencies here are all roughly the same order of magnitude as USD
+      // (0.6-1.3), so this is a much smaller approximation than the JPY
+      // case, though still not exact.
+      riskInUsd = riskInQuoteCurrency;
+    }
+
+    totalRisk += riskInUsd;
   }
   return (totalRisk / equity) * 100;
 }
+
 
 // ─── Walk-Forward Optimiser ───────────────────────────────────────────────────
 // Mini-backtest on last 200 M15 candles, tests parameter variations
