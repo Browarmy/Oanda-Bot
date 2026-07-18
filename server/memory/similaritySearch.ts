@@ -70,35 +70,92 @@ function cosineSimilarity(queryVector: DnaVector, storedVector: number[]): numbe
 }
 
 /**
- * Extract outcome quality score from outcome_context
- * @param outcomeContext - The outcome context object from memory
- * @returns Quality score between 0 (worst) and 1 (best)
+ * Score a REAL, closed-trade outcome (written by tradeOutcomeLinker.ts).
+ * This is ground truth — anchor on won/lost, then scale by how big the win
+ * or loss was so a 3R win ranks above a scratch +0.1R win.
  */
-function extractOutcomeQualityScore(outcomeContext: Record<string, unknown> | null): number {
-  if (!outcomeContext || typeof outcomeContext !== "object" || Array.isArray(outcomeContext)) {
-    return 0.5; // Default neutral score if no outcome data
+function scoreTradeOutcome(outcomeContext: Record<string, unknown>): number {
+  const won = outcomeContext["won"] === true;
+
+  const rMultipleRaw = outcomeContext["rMultiple"];
+  const rMultiple = typeof rMultipleRaw === "number" && Number.isFinite(rMultipleRaw)
+    ? Math.max(-2, Math.min(3, rMultipleRaw))
+    : (won ? 1 : -1);
+
+  const base = won ? 0.65 : 0.30;
+  const magnitude = rMultiple * 0.08;
+
+  return roundSimilarity(Math.max(0, Math.min(1, base + magnitude)));
+}
+
+/**
+ * Score a price-drift PROXY outcome (written by outcomeUpdater.ts for
+ * observations that never became a trade). Weaker evidence than a real
+ * trade — deliberately compressed toward neutral (0.38-0.62 vs. 0.30-0.89
+ * for real trades) so real outcomes dominate ranking once they exist for a
+ * given DNA pattern.
+ */
+function scorePriceDriftOutcome(
+  outcomeContext: Record<string, unknown>,
+  decisionContext: Record<string, unknown> | null
+): number {
+  const direction = outcomeContext["direction"];
+  const finalAction =
+    decisionContext && typeof decisionContext === "object" && !Array.isArray(decisionContext)
+      ? decisionContext["finalAction"]
+      : undefined;
+
+  if (direction === "flat" || (finalAction !== "BUY" && finalAction !== "SELL")) {
+    return 0.5;
   }
 
-  // Extract win rate if available (0-1)
-  const winRateRaw = outcomeContext["winRate"];
-  const winRate = typeof winRateRaw === "number" && Number.isFinite(winRateRaw)
-    ? Math.max(0, Math.min(1, winRateRaw))
-    : 0.5;
+  const movedWithSignal =
+    (finalAction === "BUY" && direction === "up") ||
+    (finalAction === "SELL" && direction === "down");
+  const movedAgainstSignal =
+    (finalAction === "BUY" && direction === "down") ||
+    (finalAction === "SELL" && direction === "up");
 
-  // Extract profit factor if available (typical range 0.5-3.0)
-  const profitFactorRaw = outcomeContext["profitFactor"];
-  const profitFactor = typeof profitFactorRaw === "number" && Number.isFinite(profitFactorRaw)
-    ? Math.max(0.5, Math.min(3.0, profitFactorRaw))
-    : 1.0;
-
-  // Normalize profit factor to 0-1 (divide by 3.0 to cap at good PF)
-  const normalizedPF = profitFactor / 3.0;
-
-  // Composite quality: 60% win rate, 40% profit factor
-  const qualityScore = (winRate * 0.6) + (normalizedPF * 0.4);
-
-  return roundSimilarity(Math.max(0, Math.min(1, qualityScore)));
+  if (movedWithSignal) return 0.62;
+  if (movedAgainstSignal) return 0.38;
+  return 0.5;
 }
+
+/**
+ * Extract outcome quality score from outcome_context.
+ * @param outcomeContext - The outcome context object from memory
+ * @param decisionContext - The decision context from the same row (needed to
+ *   judge price-drift outcomes against the direction that was signaled)
+ * @returns Quality score between 0 (worst) and 1 (best)
+ */
+function extractOutcomeQualityScore(
+  outcomeContext: Record<string, unknown> | null,
+  decisionContext: Record<string, unknown> | null
+): number {
+  if (!outcomeContext || typeof outcomeContext !== "object" || Array.isArray(outcomeContext)) {
+    return 0.5; // Not resolved yet — neutral, doesn't drag the composite either way.
+  }
+
+  const outcomeTypeRaw = outcomeContext["outcomeType"];
+  // Rows written before this change have no outcomeType field but do have
+  // pipsMoved — treat those as price_drift for backward compatibility so
+  // existing history isn't discarded.
+  const outcomeType = typeof outcomeTypeRaw === "string"
+    ? outcomeTypeRaw
+    : (typeof outcomeContext["pipsMoved"] === "number" ? "price_drift" : "unknown");
+
+  if (outcomeType === "trade") {
+    return scoreTradeOutcome(outcomeContext);
+  }
+
+  if (outcomeType === "price_drift") {
+    return scorePriceDriftOutcome(outcomeContext, decisionContext);
+  }
+
+  return 0.5;
+}
+
+
 
 export async function searchSimilarMemoryObservations(
   input: SimilaritySearchInput
@@ -137,7 +194,7 @@ export async function searchSimilarMemoryObservations(
   return rows
     .map((row) => {
       const baseSimilarity = cosineSimilarity(input.dnaVector, row.dna_vector);
-      const outcomeQuality = extractOutcomeQualityScore(row.outcome_context);
+      const outcomeQuality = extractOutcomeQualityScore(row.outcome_context, row.decision_context);
 
       // Composite similarity score: 60% DNA similarity, 40% outcome quality
       // This weights results by how successful similar setups were historically

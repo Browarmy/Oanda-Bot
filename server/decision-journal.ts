@@ -38,10 +38,15 @@ export interface DecisionJournalEntry {
   extra?: Record<string, unknown>;
 }
 
+const SAVE_INTERVAL_MS = 10_000;
+
 class DecisionJournal {
   private entries: DecisionJournalEntry[] = [];
   private loaded = false;
   private readonly maxEntries = 50000;
+
+  private dirty = false;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   async load() {
     if (this.loaded) return;
@@ -58,11 +63,48 @@ class DecisionJournal {
     this.loaded = true;
   }
 
-  async save() {
-    await savePersistentState(
-      "decisionJournal",
-      this.entries.slice(-this.maxEntries)
-    );
+  private scheduleSave() {
+    this.dirty = true;
+
+    if (this.saveTimer) return;
+
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      void this.flush();
+    }, SAVE_INTERVAL_MS);
+  }
+
+  private async flush() {
+    if (!this.dirty) return;
+
+    this.dirty = false;
+
+    try {
+      await savePersistentState(
+        "decisionJournal",
+        this.entries.slice(-this.maxEntries)
+      );
+    } catch (error) {
+      this.dirty = true;
+      console.error(
+        "[DecisionJournal] Save failed, will retry:",
+        error instanceof Error ? error.message : String(error)
+      );
+      if (!this.saveTimer) {
+        this.saveTimer = setTimeout(() => {
+          this.saveTimer = null;
+          void this.flush();
+        }, SAVE_INTERVAL_MS);
+      }
+    }
+  }
+
+  async flushNow() {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    await this.flush();
   }
 
   async record(entry: Omit<DecisionJournalEntry, "id" | "time">) {
@@ -77,7 +119,7 @@ class DecisionJournal {
     this.entries.push(fullEntry);
     this.entries = this.entries.slice(-this.maxEntries);
 
-    await this.save();
+    this.scheduleSave();
 
     return fullEntry;
   }

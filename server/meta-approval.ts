@@ -153,41 +153,29 @@ export function evaluateMetaApproval(
     };
   }
 
-  const metaScore =
+    const metaScore =
     pairScore * 0.20 +
     strategyScore * 0.30 +
     regimeScore * 0.25 +
     confScore * 0.25;
 
-  const hasStrongEvidence =
-    hasEnoughEvidence(input.strategyLearning) ||
-    hasEnoughEvidence(input.regimeLearning) ||
-    (input.confidenceCalibration?.trades ?? 0) >= 10;
-
-  if (hasStrongEvidence && metaScore < 0.38) {
-    return {
-      approved: false,
-      reason:
-        `Meta score ${(metaScore * 100).toFixed(0)}% too weak ` +
-        `(pair ${(pairScore * 100).toFixed(0)}%, ` +
-        `strategy ${(strategyScore * 100).toFixed(0)}%, ` +
-        `regime ${(regimeScore * 100).toFixed(0)}%, ` +
-        `confidence ${(confScore * 100).toFixed(0)}%)`,
-      metaScore,
-      riskMultiplier: 0,
-      components: {
-        pairScore,
-        strategyScore,
-        regimeScore,
-        confidenceScore: confScore,
-        rawConfidenceScore,
-      },
-    };
-  }
+  // Previously hard-rejected here when metaScore < 0.38 (with enough
+  // evidence). Removed: pairScore/strategyScore/regimeScore are the exact
+  // same inputs adaptive-confidence.ts already uses to raise the confidence
+  // threshold before a signal even gets here — rejecting on them again was
+  // double-counting the same weakness as two separate blocks instead of one.
+  // The protection that gate provided is now folded into the risk-multiplier
+  // bands below (a weak metaScore sizes the trade down hard instead of
+  // vetoing it outright), which still meaningfully limits exposure on
+  // marginal setups without compounding into an outright rejection.
 
   let riskMultiplier = 1.0;
 
-  if (metaScore < 0.45) {
+  if (metaScore < 0.30) {
+    riskMultiplier = 0.35;
+  } else if (metaScore < 0.38) {
+    riskMultiplier = 0.45;
+  } else if (metaScore < 0.45) {
     riskMultiplier = 0.55;
   } else if (metaScore < 0.55) {
     riskMultiplier = 0.7;

@@ -1,4 +1,16 @@
 // server/memory/outcomeUpdater.ts
+//
+// Fallback outcome resolver: for any memory observation that never became a
+// real trade (WAIT decisions), or a trade whose real outcome never got
+// linked (see tradeOutcomeLinker.ts — e.g. the bot restarted while it was
+// open and lost its in-memory snapshot), this resolves a synthetic outcome
+// from raw price movement so the row still contributes evidence.
+//
+// BUY/SELL-tagged observations get a longer delay than WAIT ones before this
+// claims them, specifically to give the real trade-outcome linker first
+// right of way — most trades close well inside that window, so this only
+// ever falls back to the proxy for the rare trade that stays open a long
+// time (or a signal that never became a trade at all).
 
 import { memoryQuery } from "./memory-db";
 
@@ -25,11 +37,10 @@ type OutcomeUpdateSummary = {
   error?: string;
 };
 
-const OUTCOME_INSTRUMENT = "EUR_USD";
-const OUTCOME_DELAY_HOURS = 4;
+const WAIT_DELAY_HOURS = 4;
+const TRADE_SIGNAL_DELAY_HOURS = 24;
 const OUTCOME_INTERVAL_MS = 4 * 60 * 60 * 1000;
-const MAX_OBSERVATIONS_PER_RUN = 50;
-const EUR_USD_PIP_SIZE = 0.0001;
+const MAX_OBSERVATIONS_PER_RUN = 200;
 const FLAT_MOVE_PIPS = 1;
 
 let outcomeUpdaterTimer: ReturnType<typeof setInterval> | null = null;
@@ -41,6 +52,16 @@ function midpoint(price: OandaPrice): number {
 function round(value: number, digits: number = 5): number {
   if (!Number.isFinite(value)) return 0;
   return Number(value.toFixed(digits));
+}
+
+function getPipSize(instrument: string): number {
+  if (instrument.includes("JPY")) return 0.01;
+  if (instrument.includes("XAU")) return 0.1;
+  if (instrument.includes("XAG")) return 0.01;
+  if (instrument.includes("BCO") || instrument.includes("WTICO")) return 0.01;
+  if (["UK100", "US30", "SPX", "NAS", "DE30", "JP225", "AU200"].some(x => instrument.includes(x))) return 1;
+  if (["BTC", "ETH", "LTC"].some(x => instrument.includes(x))) return 1;
+  return 0.0001;
 }
 
 function classifyDirection(pipsMoved: number): "up" | "down" | "flat" {
@@ -58,12 +79,16 @@ function toOandaTimestamp(value: string): string {
   return date.toISOString();
 }
 
-async function getObservedMidPrice(api: OandaClient, observedAt: string): Promise<number | null> {
+async function getObservedMidPrice(
+  api: OandaClient,
+  instrument: string,
+  observedAt: string
+): Promise<number | null> {
   if (!api.request) return null;
 
   const from = encodeURIComponent(toOandaTimestamp(observedAt));
   const data = await api.request(
-    `/v3/instruments/${OUTCOME_INSTRUMENT}/candles?granularity=M15&from=${from}&count=1&price=M`
+    `/v3/instruments/${instrument}/candles?granularity=M15&from=${from}&count=1&price=M`
   );
 
   const candle = data?.candles?.find((item: any) => item?.mid?.c);
@@ -82,13 +107,18 @@ async function getPendingObservations(): Promise<PendingObservation[]> {
         instrument,
         observed_at
       FROM memory_observations
-      WHERE instrument = $1
-        AND outcome_context IS NULL
-        AND observed_at <= NOW() - ($2::text || ' hours')::interval
+      WHERE outcome_context IS NULL
+        AND observed_at <= NOW() - (
+          CASE
+            WHEN decision_context->>'finalAction' IN ('BUY', 'SELL')
+              THEN $2::text
+            ELSE $1::text
+          END || ' hours'
+        )::interval
       ORDER BY observed_at ASC
       LIMIT $3
     `,
-    [OUTCOME_INSTRUMENT, String(OUTCOME_DELAY_HOURS), MAX_OBSERVATIONS_PER_RUN]
+    [String(WAIT_DELAY_HOURS), String(TRADE_SIGNAL_DELAY_HOURS), MAX_OBSERVATIONS_PER_RUN]
   );
 }
 
@@ -97,20 +127,22 @@ async function updateObservationOutcome(params: {
   observedAt: string;
   observedMidPrice: number;
   currentMidPrice: number;
+  pipSize: number;
 }): Promise<void> {
   const pipsMoved = round(
-    (params.currentMidPrice - params.observedMidPrice) / EUR_USD_PIP_SIZE,
+    (params.currentMidPrice - params.observedMidPrice) / params.pipSize,
     1
   );
 
   const outcomeContext = {
+    outcomeType: "price_drift",
     pipsMoved,
     direction: classifyDirection(pipsMoved),
     updatedAt: new Date().toISOString(),
     observedAt: params.observedAt,
     observedMidPrice: round(params.observedMidPrice, 5),
     currentMidPrice: round(params.currentMidPrice, 5),
-    horizonHours: OUTCOME_DELAY_HOURS,
+    horizonHours: WAIT_DELAY_HOURS,
     source: "memory_outcome_updater",
   };
 
@@ -137,15 +169,38 @@ export async function runMemoryOutcomeUpdaterOnce(api: OandaClient): Promise<Out
       };
     }
 
-    const currentPrice = await api.getPrice(OUTCOME_INSTRUMENT);
-    const currentMidPrice = midpoint(currentPrice);
+    const distinctInstruments = Array.from(new Set(pending.map(p => p.instrument)));
+    const currentMidPriceByInstrument = new Map<string, number>();
+
+    for (const instrument of distinctInstruments) {
+      try {
+        const price = await api.getPrice(instrument);
+        currentMidPriceByInstrument.set(instrument, midpoint(price));
+      } catch (error) {
+        console.error(
+          `[OutcomeUpdater] Failed to fetch current price for ${instrument}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
 
     let updated = 0;
     let skipped = 0;
 
     for (const observation of pending) {
       try {
-        const observedMidPrice = await getObservedMidPrice(api, observation.observed_at);
+        const currentMidPrice = currentMidPriceByInstrument.get(observation.instrument);
+
+        if (currentMidPrice === undefined) {
+          skipped += 1;
+          continue;
+        }
+
+        const observedMidPrice = await getObservedMidPrice(
+          api,
+          observation.instrument,
+          observation.observed_at
+        );
 
         if (observedMidPrice === null) {
           skipped += 1;
@@ -157,20 +212,22 @@ export async function runMemoryOutcomeUpdaterOnce(api: OandaClient): Promise<Out
           observedAt: observation.observed_at,
           observedMidPrice,
           currentMidPrice,
+          pipSize: getPipSize(observation.instrument),
         });
 
         updated += 1;
       } catch (error) {
         skipped += 1;
         console.error(
-          `[OutcomeUpdater] Failed observation ${observation.id}:`,
+          `[OutcomeUpdater] Failed observation ${observation.id} (${observation.instrument}):`,
           error instanceof Error ? error.message : String(error)
         );
       }
     }
 
     console.log(
-      `[OutcomeUpdater] EUR_USD outcomes checked=${pending.length} updated=${updated} skipped=${skipped}`
+      `[OutcomeUpdater] outcomes checked=${pending.length} updated=${updated} skipped=${skipped} ` +
+      `across ${distinctInstruments.length} instrument(s): ${distinctInstruments.join(", ")}`
     );
 
     return {
@@ -200,7 +257,7 @@ export function startMemoryOutcomeUpdater(api: OandaClient): void {
     void runMemoryOutcomeUpdaterOnce(api);
   }, OUTCOME_INTERVAL_MS);
 
-  console.log("[OutcomeUpdater] Started 4-hour EUR_USD outcome updater");
+  console.log("[OutcomeUpdater] Started 4-hour outcome updater (all instruments)");
 }
 
 export function stopMemoryOutcomeUpdater(): void {

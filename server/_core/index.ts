@@ -10,6 +10,8 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { memoryMigrationStartup } from "../memory/migrationRunner";
 import { memoryQuery } from "../memory/memory-db";
+import { decisionJournal } from "../decision-journal";
+
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -109,6 +111,24 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received — flushing pending state before exit...`);
+
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 5000));
+    await Promise.race([decisionJournal.flushNow(), timeout]);
+
+    server.close(() => process.exit(0));
+    // Force-exit if something (e.g. an open DB connection) keeps the server alive.
+    setTimeout(() => process.exit(0), 2000).unref();
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
+
 
 startServer().catch(console.error);

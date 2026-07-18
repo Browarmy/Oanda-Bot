@@ -79,6 +79,7 @@ export function evaluateTradeQuality(input: TradeQualityInput): TradeQualityResu
   const expectedEdgeR = Math.round(((score - 50) / 50) * 100) / 100;
 
   const approved =
+    score >= 64 &&
 score >= 64 &&
     expectedEdgeR > 0.25 &&
     spread >= 0.25 &&
