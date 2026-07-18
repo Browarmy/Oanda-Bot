@@ -118,7 +118,12 @@ export function evaluateAthenaConfidence(
     else if(confidence>=0.60) grade="D";
     else grade="F";
 
-    const approved=confidence>=0.70;
+    const APPROVAL_THRESHOLD = 0.62; // Deliberately independent of the grade ladder above —
+    // this gate runs after ~20 other gates that already filter for quality, so it isn't
+    // meant to be a primary bar. It previously got silently raised to 0.70 as a side effect
+    // of fixing the grade ladder's ordering bug (C+ was unreachable) — those are now separate.
+    const approved=confidence>=APPROVAL_THRESHOLD;
+
 
     const expectedEdgeR=(confidence-0.5)*4;
 
