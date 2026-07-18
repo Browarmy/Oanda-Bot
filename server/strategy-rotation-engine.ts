@@ -51,11 +51,11 @@ export function evaluateStrategyRotation(
 
   if (score < 35) {
     return {
-      approved: false,
+      approved: true,
       score,
-      riskMultiplier: 0,
-      confidenceAdjustment: -0.08,
-      reason: `${input.strategy} cooling off: ${wins}W/${trades.length - wins}L recent, pnl ${pnl.toFixed(2)}`,
+      riskMultiplier: 0.35,
+      confidenceAdjustment: -0.04,
+      reason: `${input.strategy} cooling off: ${wins}W/${trades.length - wins}L recent, pnl ${pnl.toFixed(2)} — sized down, not blocked`,
     };
   }
 
@@ -64,10 +64,11 @@ export function evaluateStrategyRotation(
       approved: true,
       score,
       riskMultiplier: 0.65,
-      confidenceAdjustment: -0.03,
+      confidenceAdjustment: -0.015,
       reason: `${input.strategy} weak recently: ${wins}W/${trades.length - wins}L`,
     };
   }
+
 
   return {
     approved: true,
