@@ -1152,7 +1152,7 @@ const spreadPips = pipSize > 0 ? pairStat.spread / pipSize : 0;
 const isPeakSession = ["LONDON", "NEW_YORK", "LONDON_NY"].includes(this.state.currentSession);
 const effectiveMaxSpread = isPeakSession ? 6.0 : 10.0;
 
-if (spreadPips > effectiveMaxSpread.) {
+if (spreadPips > effectiveMaxSpread) {
   this.log(`🔍 ${pairStat.instrument} — spread ${spreadPips.toFixed(1)}p > max ${effectiveMaxSpread}p (${this.state.currentSession}) — SKIP`);
   if (this.currentAudit) recordTradeBlock(this.currentAudit, "SPREAD");
   return;
