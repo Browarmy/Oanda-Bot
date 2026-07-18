@@ -123,7 +123,6 @@ export function evaluateAthenaConfidence(
     // meant to be a primary bar. It previously got silently raised to 0.70 as a side effect
     // of fixing the grade ladder's ordering bug (C+ was unreachable) — those are now separate.
     const approved=confidence>=APPROVAL_THRESHOLD;
-    const approved=confidence>=0.62;
 
 
     const expectedEdgeR=(confidence-0.5)*4;
