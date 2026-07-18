@@ -490,7 +490,7 @@ const hour = new Date(timestamp).getUTCHours();
     getRejectionAnalytics: publicProcedure.query(async () => {
       await decisionJournal.load();
 
-      const all = decisionJournal.getAll();
+      const all = await decisionJournal.getAll();
       const now = Date.now();
       const last24h = all.filter((entry) => now - entry.time <= 24 * 60 * 60 * 1000);
       const blocked = last24h.filter(
@@ -758,12 +758,12 @@ resetSecondaryAiMemory: publicProcedure.mutation(async () => {
 getDecisionJournal: publicProcedure.query(async () => {
   await decisionJournal.load();
 
-  const all = decisionJournal.getAll();
+  const all = await decisionJournal.getAll();
 
   return {
-    summary: decisionJournal.getStats(),
+    summary: await decisionJournal.getStats(),
     analytics: analyseDecisions(all),
-    recent: decisionJournal.getRecent(50),
+    recent: await decisionJournal.getRecent(50),
   };
 }),
 
