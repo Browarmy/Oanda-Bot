@@ -235,7 +235,8 @@ function defaultConfidenceBucket(bucket: string): ConfidenceBucketLearning {
 function computeConfidenceCalibrationScore(
   bucket: ConfidenceBucketLearning
 ): number {
-  if (bucket.trades < 5) return 0.5;
+  if (bucket.trades < 5) return 0.65;
+
 
   const expectedMidpoint =
     (bucket.minConfidence + bucket.maxConfidence) / 2;
@@ -264,7 +265,8 @@ function computeConfidenceCalibrationScore(
 }
 
 function computeStrategyScore(strategy: StrategyLearning): number {
-  if (strategy.trades < 5) return 0.5;
+if (strategy.trades < 5) return 0.65;
+
 
   const wrScore = strategy.winRate;
   const pfScore = Math.min(strategy.profitFactor / 2.5, 1);
@@ -297,7 +299,8 @@ function defaultRegimeLearning(regime: string): RegimeLearning {
 }
 
 function computeRegimeScore(regime: RegimeLearning): number {
-  if (regime.trades < 5) return 0.5;
+if (regime.trades < 5) return 0.65;
+
 
   const wrScore = regime.winRate;
   const pfScore = Math.min(regime.profitFactor / 2.5, 1);
