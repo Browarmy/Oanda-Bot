@@ -167,6 +167,15 @@ export async function searchSimilarMemoryObservations(
   const limit = clampLimit(input.limit);
   const instrument = input.instrument?.trim().toUpperCase();
 
+  // Without pgvector, cosine similarity has to be ranked in JS, so the SQL
+  // layer can't do a true top-N search — but it can at least bound the
+  // candidate pool instead of pulling every quality-passing row for the
+  // instrument on every single decision. Most recent CANDIDATE_POOL_SIZE
+  // observations is a reasonable proxy: recent market behavior is usually
+  // more relevant anyway, and this keeps the query flat as Memory grows
+  // instead of scaling with total table size.
+  const CANDIDATE_POOL_SIZE = 1000;
+
   const rows = await memoryQuery<MemoryObservationRow>(
     `
       SELECT
@@ -187,9 +196,11 @@ export async function searchSimilarMemoryObservations(
       WHERE memory_quality_score >= $1
         AND ($2::text IS NULL OR instrument = $2)
       ORDER BY observed_at DESC
+      LIMIT $3
     `,
-    [MINIMUM_SIMILARITY_QUALITY_SCORE, instrument ?? null]
+    [MINIMUM_SIMILARITY_QUALITY_SCORE, instrument ?? null, CANDIDATE_POOL_SIZE]
   );
+
 
   return rows
     .map((row) => {
