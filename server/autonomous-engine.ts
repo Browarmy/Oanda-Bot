@@ -1848,31 +1848,44 @@ const memoryCheck = marketMemory.shouldBlock({
   rsi: finalRsi,
 });
 
-if (memoryCheck.blocked) {
+if (memoryCheck.riskMultiplier < 1) {
+  const beforeRisk = effectiveRiskPct;
+
+  effectiveRiskPct = Math.max(
+    0.25,
+    effectiveRiskPct * memoryCheck.riskMultiplier
+  );
+
   this.log(
-    `🧠 MEMORY BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `🧠 MEMORY RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
     memoryCheck.reason
   );
 
   await decisionJournal.record({
-    type: "BLOCKED",
+    type: "RISK_REDUCED",
     stage: "META",
     instrument: pairStat.instrument,
     direction: finalAction,
     confidence: finalConfidence,
+    riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Market memory block: ${memoryCheck.reason}`,
-    extra: memoryCheck.similar,
+    reason: `Market memory: ${memoryCheck.reason}`,
+    extra: {
+      beforeRiskPct: beforeRisk,
+      afterRiskPct: effectiveRiskPct,
+      riskMultiplier: memoryCheck.riskMultiplier,
+      similar: memoryCheck.similar,
+    },
   });
-
-  return;
+} else {
+  this.log(
+    `🧠 MEMORY OK: ${pairStat.instrument} ${finalAction} — ` +
+    memoryCheck.reason
+  );
 }
 
-this.log(
-  `🧠 MEMORY OK: ${pairStat.instrument} ${finalAction} — ` +
-  memoryCheck.reason
-);
 
 // ── STRATEGY-REGIME MATRIX V1 ─────────────────────────────────────────────
 const matrixCheck = strategyRegimeMatrix.shouldBlock(metaStrategy, metaRegime);
