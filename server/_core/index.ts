@@ -33,10 +33,27 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
-  await memoryMigrationStartup;
+  try {
+    await memoryMigrationStartup;
+  } catch (error) {
+    // Memory (Postgres, isolated) failing to migrate must never take down
+    // Trading — a DB hiccup here used to kill the whole process before
+    // Express even started listening, since nothing else was keeping the
+    // event loop alive. Log it loudly and keep going: the app starts with
+    // Memory degraded rather than not starting at all. Memory-dependent
+    // features will individually error until this resolves, but trading,
+    // the dashboard, and everything else stays up.
+    console.error(
+      "[Startup] Memory migration failed — starting WITHOUT Memory. " +
+      "Trading and the rest of the app will continue; Memory-dependent " +
+      "features will error until this is resolved:",
+      error
+    );
+  }
 
   const app = express();
   const server = createServer(app);
+
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

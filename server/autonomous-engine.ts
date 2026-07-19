@@ -1886,6 +1886,7 @@ if (memoryCheck.riskMultiplier < 1) {
   );
 }
 
+
 // ── STRATEGY-REGIME MATRIX V1 ─────────────────────────────────────────────
 const matrixCheck = strategyRegimeMatrix.shouldBlock(metaStrategy, metaRegime);
 
