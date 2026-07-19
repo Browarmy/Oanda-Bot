@@ -71,15 +71,6 @@ function encodeTrendDirection(value: unknown, fallbackDirection?: MarketDirectio
   return 0.5;
 }
 
-function encodeVolatilityState(volatilityScore: number): number {
-  const score = normalisePercent(volatilityScore);
-
-  if (score >= 0.85) return 1.0;
-  if (score >= 0.65) return 0.75;
-  if (score >= 0.35) return 0.5;
-  return 0.25;
-}
-
 function encodeVolumeProfilePosition(value: unknown): number {
   const key = normaliseKey(value);
 
