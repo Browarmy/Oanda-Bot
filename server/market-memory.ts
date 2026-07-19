@@ -123,16 +123,8 @@ class MarketMemory {
       };
     }
 
-    return {
-      blocked: false,
-      riskMultiplier: 1,
-      reason:
-        `memory acceptable: ${similar.wins}W/${similar.losses}L, ` +
-
-
-
-  getRecent(limit = 100) {
-    return this.memories.slice(-limit).reverse();
+getRecent(limit = 100) {
+return this.memories.slice(-limit).reverse();
   }
 
   getAll() {
