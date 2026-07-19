@@ -20,7 +20,7 @@
  * - Scan only top 15 FX pairs (not 40 instruments)
  */
 import { EventEmitter } from "events";
-import { learningEngine } from "./learning-engine";
+import { learningEngine, startPostgresCalibrationRefresh } from "./learning-engine";
 import {
   notifyTradeOpen,
   notifyTradeClose,
@@ -831,6 +831,8 @@ if (evoStatus) {
 }
 
 startMemoryOutcomeUpdater(this.api);
+startPostgresCalibrationRefresh();
+
 
     // === DAILY PERFORMANCE SUMMARY ===
     const winRate = this.state.totalTrades > 0 
