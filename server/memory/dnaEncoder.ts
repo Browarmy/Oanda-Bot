@@ -91,14 +91,20 @@ function encodeSession(value: unknown): number {
   return 0.5;
 }
 
-function encodeRegime(value: unknown): number {
+function encodeRegime(value: unknown, regimeConfidence?: number): number {
   const key = normaliseKey(value);
+  const confidence = normalisePercent(regimeConfidence ?? 0.5);
 
-  if (key === "RANGING") return 0.0;
-  if (key === "TRENDING" || key === "BREAKOUT") return 1.0;
+  // Keep the same categorical ordering (ranging < transitioning < trending)
+  // but use regimeConfidence to add resolution within each category instead
+  // of collapsing every RANGING state to the same flat 0.0, regardless of
+  // how confidently ranging it actually is.
+  if (key === "RANGING") return clamp01(0.5 - confidence * 0.5);
+  if (key === "TRENDING" || key === "BREAKOUT") return clamp01(0.5 + confidence * 0.5);
 
   return 0.5;
 }
+
 
 function encodeMomentumDirection(value: unknown, fallbackDirection?: MarketDirection): number {
   const key = normaliseKey(value);
@@ -128,10 +134,10 @@ export function encodeMarketStateToDnaVector(input: MarketCharacterisationForDna
   const dnaVector: DnaVector = [
     roundDnaValue(encodeTrendDirection(input.trendDirection, input.direction ?? marketState.direction)),
     roundDnaValue(normalisePercent(marketState.trendScore)),
-    roundDnaValue(encodeVolatilityState(marketState.volatilityScore)),
+    roundDnaValue(normalisePercent(marketState.volatilityScore)),
     roundDnaValue(encodeVolumeProfilePosition(marketState.volumeProfilePosition)),
     roundDnaValue(encodeSession(input.session)),
-    roundDnaValue(encodeRegime(marketState.regime)),
+    roundDnaValue(encodeRegime(marketState.regime, marketState.regimeConfidence)),
     roundDnaValue(normalisePercent(marketState.liquidityScore)),
     roundDnaValue(encodeMomentumDirection(input.momentumDirection, input.direction ?? marketState.direction)),
     roundDnaValue(encodeMacroFlag(input.macroFlag)),
