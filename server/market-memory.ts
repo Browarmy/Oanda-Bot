@@ -128,10 +128,7 @@ class MarketMemory {
       riskMultiplier: 1,
       reason:
         `memory acceptable: ${similar.wins}W/${similar.losses}L, ` +
-        `WR ${(similar.winRate * 100).toFixed(0)}%`,
-      similar,
-    };
-  }
+
 
 
   getRecent(limit = 100) {
