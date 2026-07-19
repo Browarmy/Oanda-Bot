@@ -106,6 +106,7 @@ class MarketMemory {
     if (similar.total < 8) {
       return {
         blocked: false,
+        riskMultiplier: 1,
         reason: "not enough similar market memory",
         similar,
       };
@@ -113,22 +114,21 @@ class MarketMemory {
 
     if (similar.winRate < 0.35 && similar.pnl < 0) {
       return {
-        blocked: true,
+        blocked: false,
+        riskMultiplier: 0.35,
         reason:
           `bad memory match: ${similar.wins}W/${similar.losses}L, ` +
-          `WR ${(similar.winRate * 100).toFixed(0)}%`,
+          `WR ${(similar.winRate * 100).toFixed(0)}% — sized down, not blocked`,
         similar,
       };
     }
 
     return {
       blocked: false,
+      riskMultiplier: 1,
       reason:
         `memory acceptable: ${similar.wins}W/${similar.losses}L, ` +
-        `WR ${(similar.winRate * 100).toFixed(0)}%`,
-      similar,
-    };
-  }
+
 
   getRecent(limit = 100) {
     return this.memories.slice(-limit).reverse();
