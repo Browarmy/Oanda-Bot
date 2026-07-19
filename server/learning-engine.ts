@@ -18,6 +18,8 @@
  */
 
 import { loadPersistentState, savePersistentState } from "./persistent-memory";
+import { getCalibrationReport, type CalibrationReportRow } from "./memory/confidenceCalibrationTracker";
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -315,13 +317,91 @@ if (regime.trades < 5) return 0.65;
   );
 }
 
+// ─── Postgres calibration cache ────────────────────────────────────────────
+// getConfidenceCalibration() below is called synchronously, many times per
+// scan cycle, on the live trading hot path — so the richer, real-trade
+// Postgres calibration data (memory_confidence_calibration, previously only
+// exposed read-only to the dashboard) is refreshed on a timer and cached
+// here instead of queried per-decision.
+
+let cachedPostgresCalibration: CalibrationReportRow[] = [];
+let postgresCalibrationRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+const POSTGRES_CALIBRATION_MIN_TRADES = 8;
+const POSTGRES_CALIBRATION_MAX_WEIGHT = 0.6;
+const POSTGRES_CALIBRATION_FULL_WEIGHT_TRADES = 30;
+
+type CombinedCalibrationBucket = {
+  trades: number;
+  winRate: number;
+  profitFactor: number;
+  averageRMultiple: number;
+};
+
+function combineBucketPair(
+  a: CalibrationReportRow | undefined,
+  b: CalibrationReportRow | undefined
+): CombinedCalibrationBucket {
+  const trades = (a?.trades ?? 0) + (b?.trades ?? 0);
+
+  if (trades === 0) {
+    return { trades: 0, winRate: 0, profitFactor: 1, averageRMultiple: 0 };
+  }
+
+  const weighted = (getValue: (row: CalibrationReportRow) => number) =>
+    ((a ? getValue(a) * a.trades : 0) + (b ? getValue(b) * b.trades : 0)) / trades;
+
+  return {
+    trades,
+    winRate: weighted(r => r.winRate),
+    profitFactor: weighted(r => r.profitFactor),
+    averageRMultiple: weighted(r => r.averageRMultiple),
+  };
+}
+
+// Postgres tracks 5-point buckets (70-75, 75-80, ...); this file uses
+// 10-point buckets (70-80, 80-90, ...) — combine pairs to match.
+function combinePostgresBucketsInto10Point(
+  rows: CalibrationReportRow[]
+): Map<string, CombinedCalibrationBucket> {
+  const byBucket = new Map(rows.map(r => [r.bucket, r]));
+
+  const result = new Map<string, CombinedCalibrationBucket>();
+  result.set("70-80", combineBucketPair(byBucket.get("70-75"), byBucket.get("75-80")));
+  result.set("80-90", combineBucketPair(byBucket.get("80-85"), byBucket.get("85-90")));
+  result.set("90-100", combineBucketPair(byBucket.get("90plus"), undefined));
+  return result;
+}
+
+async function refreshPostgresCalibrationCache(): Promise<void> {
+  try {
+    cachedPostgresCalibration = await getCalibrationReport();
+  } catch (error) {
+    console.error(
+      "[LearningEngine] Failed to refresh Postgres calibration cache:",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
+/** Start the background refresh of the Postgres calibration cache. Call once at startup. */
+export function startPostgresCalibrationRefresh(intervalMs = 5 * 60 * 1000): void {
+  if (postgresCalibrationRefreshTimer) return;
+
+  void refreshPostgresCalibrationCache();
+
+  postgresCalibrationRefreshTimer = setInterval(() => {
+    void refreshPostgresCalibrationCache();
+  }, intervalMs);
+}
+
 // ─── Learning Engine ──────────────────────────────────────────────────────────
 
 export class LearningEngine {
   private state: LearningState;
   private dirty = false;
   private saveTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly EVOLUTION_MIN_TRADES = 20;  // evolve params after N new learned trades
+  private readonly EVOLUTION_MIN_TRADES = 20;  // evolve params after N new learned trade
   private lastEvolutionTradeCount = 0;
   private readonly PAIR_DISABLE_THRESHOLD = 0.35;  // disable pair if win rate < 35%
   private readonly PAIR_ENABLE_THRESHOLD = 0.45;   // re-enable if win rate recovers to 45%
@@ -899,8 +979,32 @@ getBestConfidenceBuckets(n = 3): ConfidenceBucketLearning[] {
 
 getConfidenceCalibration(confidence: number): ConfidenceBucketLearning {
   const bucketName = getConfidenceBucketName(confidence);
-  return this.state.confidenceBuckets[bucketName] ?? defaultConfidenceBucket(bucketName);
+  const emaBucket = this.state.confidenceBuckets[bucketName] ?? defaultConfidenceBucket(bucketName);
+
+  const postgresBuckets = combinePostgresBucketsInto10Point(cachedPostgresCalibration);
+  const postgresData = postgresBuckets.get(bucketName);
+
+  if (!postgresData || postgresData.trades < POSTGRES_CALIBRATION_MIN_TRADES) {
+    return emaBucket;
+  }
+
+  const postgresWeight = Math.min(
+    POSTGRES_CALIBRATION_MAX_WEIGHT,
+    postgresData.trades / POSTGRES_CALIBRATION_FULL_WEIGHT_TRADES
+  );
+
+  const blendedBucket: ConfidenceBucketLearning = {
+    ...emaBucket,
+    winRate: emaBucket.winRate * (1 - postgresWeight) + postgresData.winRate * postgresWeight,
+    profitFactor: emaBucket.profitFactor * (1 - postgresWeight) + postgresData.profitFactor * postgresWeight,
+    avgPnl: postgresWeight >= 0.5 ? postgresData.averageRMultiple : emaBucket.avgPnl,
+  };
+
+  blendedBucket.calibratedScore = computeConfidenceCalibrationScore(blendedBucket);
+
+  return blendedBucket;
 }
+
 
 getRegimeLearning(regime: string): RegimeLearning {
   return this.state.regimes[regime] ?? defaultRegimeLearning(regime);
