@@ -20,7 +20,7 @@
  * - Scan only top 15 FX pairs (not 40 instruments)
  */
 import { EventEmitter } from "events";
-import { learningEngine } from "./learning-engine";
+import { learningEngine, startPostgresCalibrationRefresh } from "./learning-engine";
 import {
   notifyTradeOpen,
   notifyTradeClose,
@@ -831,6 +831,8 @@ if (evoStatus) {
 }
 
 startMemoryOutcomeUpdater(this.api);
+startPostgresCalibrationRefresh();
+
 
     // === DAILY PERFORMANCE SUMMARY ===
     const winRate = this.state.totalTrades > 0 
@@ -1136,6 +1138,131 @@ if (Date.now() - pairStat.lastTrade < PAIR_TRADE_COOLDOWN_MS) continue;
 this.scanning = false;
   }
 
+// Extracted from scanPair() — this exact block has been hand-edited three
+// times this session (EUR_USD gate removal, memoryObservationId plumbing,
+// trade-outcome linkage) and each time was riskier than it needed to be
+// because it was buried ~170 lines into a much larger method with no clear
+// boundary. Giving it a name and a signature makes future edits here much
+// safer to make and merge by hand.
+private async writeMemoryAndConsultHistorian(params: {
+  pairStat: PairStats;
+  finalAction: "BUY" | "SELL" | "WAIT";
+  finalConfidence: number;
+  finalReason: string;
+  finalTrend: "BULLISH" | "BEARISH" | "NEUTRAL";
+  marketState: ReturnType<typeof buildMarketState>;
+  regime: ReturnType<typeof detectRegime>;
+  stratSignal: ReturnType<typeof selectStrategy>;
+  spreadPips: number;
+  utcHour: number;
+}): Promise<{
+  memoryObservationId: string | null;
+  finalConfidence: number;
+  finalReason: string;
+}> {
+  const { pairStat, finalAction, finalTrend, marketState, regime, stratSignal, spreadPips, utcHour } = params;
+  let finalConfidence = params.finalConfidence;
+  let finalReason = params.finalReason;
+  let memoryObservationId: string | null = null;
+
+  try {
+    const memoryNewsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
+    const memoryUpcomingNews = newsGuard.getUpcomingEvents(pairStat.instrument);
+    const memorySessionContext = getSessionContext(utcHour);
+
+    const memoryInput = {
+      marketState,
+      trendDirection: finalTrend,
+      session: memorySessionContext.session,
+      momentumDirection:
+        finalAction === "BUY" ? "BULLISH" :
+        finalAction === "SELL" ? "BEARISH" :
+        "NEUTRAL",
+      macroFlag:
+        memoryNewsCheck.blocked ? "ACTIVE_SHOCK" :
+        memoryUpcomingNews.length > 0 ? "SCHEDULED_EVENT" :
+        "NONE",
+      confidenceScore: finalConfidence,
+      direction: finalAction,
+    } as const;
+
+    const memoryDnaVector = encodeMarketStateToDnaVector(memoryInput);
+
+    await writeMemoryObservation({
+      instrument: pairStat.instrument,
+      observedAt: new Date(),
+      marketState: {
+        ...marketState,
+        memorySession: memorySessionContext.session,
+        memoryMacroFlag: memoryInput.macroFlag,
+        memoryMomentumDirection: memoryInput.momentumDirection,
+        memoryTrendDirection: memoryInput.trendDirection,
+      },
+      dnaVector: memoryDnaVector,
+      source: "autonomous_engine",
+      timeframe: "M15",
+      decisionContext: {
+        finalAction,
+        finalConfidence,
+        finalReason,
+        regime: regime.regime,
+        riskMood: regime.riskMood,
+        strategy: stratSignal.strategy,
+        spreadPips,
+      },
+    }).then((result) => {
+      memoryObservationId = result.observation.id;
+    });
+
+    const historianReport = await buildHistorianReport({
+      instrument: pairStat.instrument,
+      dnaVector: memoryDnaVector,
+    });
+
+    if (historianReport.status === "insufficient_memory_depth") {
+      this.log(`📜 HISTORIAN: ${pairStat.instrument} insufficient Memory depth — ${historianReport.similarStatesFound}/${historianReport.minimumRequired} similar states`);
+    } else {
+      // ── HISTORIAN CONFIDENCE ADJUSTMENT ─────────────────────────────────
+      if (historianReport.similarStatesFound >= 10) {
+        const dist = historianReport.historicalDecisionDistribution;
+        const currentDirPct = finalAction === "BUY"
+          ? dist.BUY
+          : finalAction === "SELL"
+            ? dist.SELL
+            : dist.WAIT;
+
+        let histAdj = 0;
+        if (currentDirPct > 60) histAdj = 0.035;           // strong historical support
+        else if (currentDirPct < 25) histAdj = -0.05;      // strong historical contra-signal
+        else if (currentDirPct > 45) histAdj = 0.015;      // mild support
+
+        if (histAdj !== 0) {
+          const before = finalConfidence;
+          finalConfidence = Math.min(Math.max(finalConfidence + histAdj, 0), 0.99);
+          this.log(`📜 HISTORIAN ADJUST: ${pairStat.instrument} ${finalAction} — ${currentDirPct}% historical | ${(before*100).toFixed(0)}% → ${(finalConfidence*100).toFixed(0)}%`);
+
+          finalReason = `[HIST✓] ${finalReason}`;
+        }
+      }
+
+      const topAnalogue = historianReport.topAnalogues[0];
+
+      this.log(
+        `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
+        `top=${topAnalogue.similarityScore} ${topAnalogue.decisionMade} | ` +
+        `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
+        `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
+        `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
+      );
+    }
+  } catch (error) {
+    this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return { memoryObservationId, finalConfidence, finalReason };
+}
+
+
 private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
     if (!this.api) return;
     if (this.currentAudit) this.currentAudit.scanned++;
@@ -1310,103 +1437,22 @@ if (finalAction !== "WAIT") {
   );
 }
 
-let memoryObservationId: string | null = null;
-
-try {
-  const memoryNewsCheck = newsGuard.isNewsBlocked(pairStat.instrument);
-  const memoryUpcomingNews = newsGuard.getUpcomingEvents(pairStat.instrument);
-  const memorySessionContext = getSessionContext(utcHour);
-
-  const memoryInput = {
-    marketState,
-    trendDirection: finalTrend,
-    session: memorySessionContext.session,
-    momentumDirection:
-      finalAction === "BUY" ? "BULLISH" :
-      finalAction === "SELL" ? "BEARISH" :
-      "NEUTRAL",
-    macroFlag:
-      memoryNewsCheck.blocked ? "ACTIVE_SHOCK" :
-      memoryUpcomingNews.length > 0 ? "SCHEDULED_EVENT" :
-      "NONE",
-    confidenceScore: finalConfidence,
-    direction: finalAction,
-  } as const;
-
-const memoryDnaVector = encodeMarketStateToDnaVector(memoryInput);
-
-
-await writeMemoryObservation({
-    instrument: pairStat.instrument,
-    observedAt: new Date(),
-    marketState: {
-      ...marketState,
-      memorySession: memorySessionContext.session,
-      memoryMacroFlag: memoryInput.macroFlag,
-      memoryMomentumDirection: memoryInput.momentumDirection,
-      memoryTrendDirection: memoryInput.trendDirection,
-    },
-dnaVector: memoryDnaVector,
-    source: "autonomous_engine",
-    timeframe: "M15",
-    decisionContext: {
-      finalAction,
-      finalConfidence,
-      finalReason,
-      regime: regime.regime,
-      riskMood: regime.riskMood,
-      strategy: stratSignal.strategy,
-      spreadPips,
-    },
-  }).then((result) => {
-    memoryObservationId = result.observation.id;
-  });
-
-const historianReport = await buildHistorianReport({
-  instrument: pairStat.instrument,
-  dnaVector: memoryDnaVector,
+const memoryResult = await this.writeMemoryAndConsultHistorian({
+  pairStat,
+  finalAction,
+  finalConfidence,
+  finalReason,
+  finalTrend,
+  marketState,
+  regime,
+  stratSignal,
+  spreadPips,
+  utcHour,
 });
 
-if (historianReport.status === "insufficient_memory_depth") {
-  this.log(`📜 HISTORIAN: ${pairStat.instrument} insufficient Memory depth — ${historianReport.similarStatesFound}/${historianReport.minimumRequired} similar states`);
-} else {
-// ── HISTORIAN CONFIDENCE ADJUSTMENT ───────────────────────────────────────
-if (historianReport.status !== "insufficient_memory_depth" && historianReport.similarStatesFound >= 10) {
-  const top = historianReport.topAnalogues[0];
-  const dist = historianReport.historicalDecisionDistribution;
-  const currentDirPct = finalAction === "BUY" 
-    ? dist.BUY 
-    : finalAction === "SELL" 
-      ? dist.SELL 
-      : dist.WAIT;
-  
-  let histAdj = 0;
-  if (currentDirPct > 60) histAdj = 0.035;           // strong historical support
-  else if (currentDirPct < 25) histAdj = -0.05;      // strong historical contra-signal
-  else if (currentDirPct > 45) histAdj = 0.015;      // mild support
-  
-  if (histAdj !== 0) {
-    const before = finalConfidence;
-    finalConfidence = Math.min(Math.max(finalConfidence + histAdj, 0), 0.99);
-    this.log(`📜 HISTORIAN ADJUST: ${pairStat.instrument} ${finalAction} — ${currentDirPct}% historical | ${(before*100).toFixed(0)}% → ${(finalConfidence*100).toFixed(0)}%`);
-    
-    finalReason = `[HIST✓] ${finalReason}`;
-  }
-}
-  const topAnalogue = historianReport.topAnalogues[0];
-
-  this.log(
-    `📜 HISTORIAN: ${pairStat.instrument} ${historianReport.similarStatesFound} similar states | ` +
-    `top=${topAnalogue.similarityScore} ${topAnalogue.decisionMade} | ` +
-    `BUY ${historianReport.historicalDecisionDistribution.BUY}% / ` +
-    `SELL ${historianReport.historicalDecisionDistribution.SELL}% / ` +
-    `WAIT ${historianReport.historicalDecisionDistribution.WAIT}%`
-   );
-}
-} catch (error) {
-
-  this.log(`⚠️ MEMORY WRITE FAILED: ${pairStat.instrument} — ${error instanceof Error ? error.message : String(error)}`);
-}
+const memoryObservationId = memoryResult.memoryObservationId;
+finalConfidence = memoryResult.finalConfidence;
+finalReason = memoryResult.finalReason;
 
 
                if (finalAction === "WAIT") {
