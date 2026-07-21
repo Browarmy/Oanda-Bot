@@ -1,5 +1,27 @@
 import { loadPersistentState, savePersistentState } from "./persistent-memory";
 
+// Same Wilson score interval used in confidenceCalibrationTracker.ts —
+// duplicated locally (not imported) since this file works off in-memory
+// entries rather than the Postgres calibration table, but the math is the
+// same well-established formula (Wilson, 1927): stays well-behaved at small
+// sample sizes, unlike a naive normal-approximation interval.
+function wilsonScoreInterval(wins: number, trades: number, z = 1.96): { lower: number; upper: number } {
+  if (trades <= 0) return { lower: 0, upper: 1 };
+
+  const p = wins / trades;
+  const z2 = z * z;
+  const denominator = 1 + z2 / trades;
+  const center = (p + z2 / (2 * trades)) / denominator;
+  const margin =
+    (z / denominator) *
+    Math.sqrt((p * (1 - p)) / trades + z2 / (4 * trades * trades));
+
+  return {
+    lower: Math.max(0, center - margin),
+    upper: Math.min(1, center + margin),
+  };
+}
+
 export interface MarketMemoryEntry {
   time: number;
   instrument: string;
@@ -73,12 +95,15 @@ class MarketMemory {
     const wins = similar.filter((m) => m.won);
     const losses = similar.filter((m) => !m.won);
     const pnl = similar.reduce((sum, m) => sum + m.pnl, 0);
+    const wilson = wilsonScoreInterval(wins.length, similar.length);
 
     return {
       total: similar.length,
       wins: wins.length,
       losses: losses.length,
       winRate: similar.length > 0 ? wins.length / similar.length : 0.5,
+      winRateLower: wilson.lower,
+      winRateUpper: wilson.upper,
       pnl,
       score:
         similar.length < 8
@@ -112,13 +137,13 @@ class MarketMemory {
       };
     }
 
-    if (similar.winRate < 0.35 && similar.pnl < 0) {
+    if (similar.winRateUpper < 0.35 && similar.pnl < 0) {
       return {
         blocked: false,
         riskMultiplier: 0.35,
         reason:
           `bad memory match: ${similar.wins}W/${similar.losses}L, ` +
-          `WR ${(similar.winRate * 100).toFixed(0)}% — sized down, not blocked`,
+          `WR ${(similar.winRate * 100).toFixed(0)}% (95% CI up to ${(similar.winRateUpper * 100).toFixed(0)}%) — sized down, not blocked`,
         similar,
       };
     }
@@ -128,8 +153,10 @@ class MarketMemory {
       riskMultiplier: 1,
       reason:
         `memory acceptable: ${similar.wins}W/${similar.losses}L, ` +
-
-
+        `WR ${(similar.winRate * 100).toFixed(0)}%`,
+      similar,
+    };
+  }
 
   getRecent(limit = 100) {
     return this.memories.slice(-limit).reverse();
