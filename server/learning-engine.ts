@@ -18,7 +18,8 @@
  */
 
 import { loadPersistentState, savePersistentState } from "./persistent-memory";
-import { getCalibrationReport, type CalibrationReportRow } from "./memory/confidenceCalibrationTracker";
+import { getCalibrationReport, wilsonScoreInterval, type CalibrationReportRow } from "./memory/confidenceCalibrationTracker";
+
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -334,8 +335,12 @@ const POSTGRES_CALIBRATION_FULL_WEIGHT_TRADES = 30;
 type CombinedCalibrationBucket = {
   trades: number;
   winRate: number;
+  winRateLower: number;
+  winRateUpper: number;
+  weightedWinRate: number;
   profitFactor: number;
   averageRMultiple: number;
+  weightedAverageRMultiple: number;
 };
 
 function combineBucketPair(
@@ -345,19 +350,39 @@ function combineBucketPair(
   const trades = (a?.trades ?? 0) + (b?.trades ?? 0);
 
   if (trades === 0) {
-    return { trades: 0, winRate: 0, profitFactor: 1, averageRMultiple: 0 };
+    return {
+      trades: 0,
+      winRate: 0,
+      winRateLower: 0,
+      winRateUpper: 1,
+      weightedWinRate: 0,
+      profitFactor: 1,
+      averageRMultiple: 0,
+      weightedAverageRMultiple: 0,
+    };
   }
 
   const weighted = (getValue: (row: CalibrationReportRow) => number) =>
     ((a ? getValue(a) * a.trades : 0) + (b ? getValue(b) * b.trades : 0)) / trades;
 
+  // Recompute the Wilson interval from pooled raw wins/trades rather than
+  // combining the two sub-bucket intervals directly — intervals don't
+  // combine linearly, but the underlying counts do.
+  const wins = (a ? a.winRate * a.trades : 0) + (b ? b.winRate * b.trades : 0);
+  const pooledWilson = wilsonScoreInterval(wins, trades);
+
   return {
     trades,
     winRate: weighted(r => r.winRate),
+    winRateLower: pooledWilson.lower,
+    winRateUpper: pooledWilson.upper,
+    weightedWinRate: weighted(r => r.weightedWinRate),
     profitFactor: weighted(r => r.profitFactor),
     averageRMultiple: weighted(r => r.averageRMultiple),
+    weightedAverageRMultiple: weighted(r => r.weightedAverageRMultiple),
   };
 }
+
 
 // Postgres tracks 5-point buckets (70-75, 75-80, ...); this file uses
 // 10-point buckets (70-80, 80-90, ...) — combine pairs to match.
@@ -988,17 +1013,28 @@ getConfidenceCalibration(confidence: number): ConfidenceBucketLearning {
     return emaBucket;
   }
 
-  const postgresWeight = Math.min(
+  // Trade-count weight: more real trades -> more trust, capped.
+  const countWeight = Math.min(
     POSTGRES_CALIBRATION_MAX_WEIGHT,
     postgresData.trades / POSTGRES_CALIBRATION_FULL_WEIGHT_TRADES
   );
 
+  // Reliability weight: a bucket can clear the trade-count bar and still be
+  // statistically unreliable (e.g. 8 trades at 50% has a Wilson interval
+  // spanning roughly 20-80%) — a wide interval means don't trust it as much
+  // yet, even though the count alone would suggest otherwise.
+  const intervalWidth = postgresData.winRateUpper - postgresData.winRateLower;
+  const reliabilityWeight = Math.max(0, 1 - intervalWidth);
+
+  const postgresWeight = countWeight * reliabilityWeight;
+
   const blendedBucket: ConfidenceBucketLearning = {
     ...emaBucket,
-    winRate: emaBucket.winRate * (1 - postgresWeight) + postgresData.winRate * postgresWeight,
+    winRate: emaBucket.winRate * (1 - postgresWeight) + postgresData.weightedWinRate * postgresWeight,
     profitFactor: emaBucket.profitFactor * (1 - postgresWeight) + postgresData.profitFactor * postgresWeight,
-    avgPnl: postgresWeight >= 0.5 ? postgresData.averageRMultiple : emaBucket.avgPnl,
+    avgPnl: postgresWeight >= 0.5 ? postgresData.weightedAverageRMultiple : emaBucket.avgPnl,
   };
+
 
   blendedBucket.calibratedScore = computeConfidenceCalibrationScore(blendedBucket);
 
