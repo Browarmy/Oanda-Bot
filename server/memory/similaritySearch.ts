@@ -202,6 +202,25 @@ export async function searchSimilarMemoryObservations(
   );
 
 
+// Half-life for recency weighting — same 45-day choice as
+// confidenceCalibrationTracker.ts, for the same reason: FX regimes tend to
+// shift over weeks-to-months, so this discounts stale matches without
+// being so short that a single quiet week swings rankings around.
+const RECENCY_HALF_LIFE_DAYS = 45;
+
+// A match never drops below this weight no matter how old — "Memory never
+// forgets" means recency should temper an old-but-precise DNA match, not
+// erase it outright. A very old but near-exact match can still outrank a
+// recent but mediocre one.
+const MIN_RECENCY_WEIGHT = 0.5;
+
+function computeRecencyWeight(observedAt: string): number {
+  const ageMs = Date.now() - new Date(observedAt).getTime();
+  const ageDays = Math.max(0, ageMs / (1000 * 60 * 60 * 24));
+  const decay = Math.exp((-Math.LN2 * ageDays) / RECENCY_HALF_LIFE_DAYS);
+  return MIN_RECENCY_WEIGHT + (1 - MIN_RECENCY_WEIGHT) * decay;
+}
+
   return rows
     .map((row) => {
       const baseSimilarity = cosineSimilarity(input.dnaVector, row.dna_vector);
@@ -210,16 +229,19 @@ export async function searchSimilarMemoryObservations(
       // Composite similarity score: 60% DNA similarity, 40% outcome quality
       // This weights results by how successful similar setups were historically
       const compositeScore = (baseSimilarity * 0.6) + (outcomeQuality * 0.4);
+      const recencyWeight = computeRecencyWeight(row.observed_at);
+      const finalScore = compositeScore * recencyWeight;
 
       return {
         ...row,
-        similarity_score: roundSimilarity(compositeScore),
+        similarity_score: roundSimilarity(finalScore),
         outcomeQualityScore: outcomeQuality,
       };
     })
     .sort((left, right) => right.similarity_score - left.similarity_score)
     .slice(0, limit);
 }
+
 
 export function calculateDnaCosineSimilarity(
   queryVector: DnaVector,

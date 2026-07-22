@@ -68,7 +68,9 @@ export function evaluateAthenaConfidence(
   else if (confidence >= 0.75) grade = "B";
   else if (confidence >= 0.65) grade = "C+";
   else if (confidence >= 0.60) grade = "C";
-  else grade = "D";
+  else if (confidence >= 0.55) grade = "D";
+  else grade = "F";
+
 
   // Independent approval gate.
   // This runs after ~20 other trading filters, so it should remain

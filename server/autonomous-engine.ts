@@ -1263,7 +1263,171 @@ private async writeMemoryAndConsultHistorian(params: {
 }
 
 
+// Extracted from scanPair() — Kelly position sizing, then three
+// independent kill-switch/risk-reduction checks (strategy genome,
+// market memory, strategy-regime matrix) that all read/adjust the same
+// effectiveRiskPct. 2 of these 4 sections still have an early-return path.
+private async runPositionSizingAndStrategyChecks(params: {
+  pairStat: PairStats;
+  finalAction: "BUY" | "SELL";
+  finalConfidence: number;
+  finalRsi: number;
+  regime: ReturnType<typeof detectRegime>;
+  stratSignal: ReturnType<typeof selectStrategy>;
+  portfolioManagerRiskMultiplier: number;
+  portfolioManagerReason: string;
+}): Promise<
+  | { stop: true }
+  | { stop: false; effectiveRiskPct: number; metaStrategy: string; metaRegime: string; memoryScore: number | undefined }
+> {
+  const { pairStat, finalAction, finalConfidence, finalRsi, regime, stratSignal, portfolioManagerRiskMultiplier, portfolioManagerReason } = params;
+  const cfg = this.state.config;
+
+  // ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
+  let effectiveRiskPct = cfg.riskPercent;
+  if (portfolioManagerRiskMultiplier < 1) {
+    const beforeRisk = effectiveRiskPct;
+    effectiveRiskPct *= portfolioManagerRiskMultiplier;
+
+    this.log(
+      `🧠 PORTFOLIO MANAGER RISK: ${pairStat.instrument} ${finalAction} — ` +
+      `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+      portfolioManagerReason
+    );
+  }
+  const recentTrades = this.state.tradeHistory.slice(-30);
+
+  if (recentTrades.length >= 15) {
+    const wins = recentTrades.filter(t => t.pnl > 0);
+    const losses = recentTrades.filter(t => t.pnl < 0);
+
+    if (wins.length >= 5 && losses.length >= 3) {
+      const winRate = wins.length / recentTrades.length;
+      const avgWin = wins.reduce((s, t) => s + t.pnl, 0) / wins.length;
+      const avgLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length);
+      const rr = avgLoss > 0 ? avgWin / avgLoss : 1;
+      const kelly = winRate - (1 - winRate) / rr;
+      const fractionalKelly = Math.max(0.005, Math.min(kelly * 0.25, 0.02));
+
+      effectiveRiskPct = fractionalKelly * 100;
+
+      const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
+      if (recentLosses >= 4) effectiveRiskPct *= 0.5;
+      else if (recentLosses >= 3) effectiveRiskPct *= 0.7;
+
+      this.log(
+        `📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate * 100).toFixed(0)}% ` +
+        `RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`
+      );
+    }
+  }
+
+  // ── META CONTEXT ───────────────────────────────────────────────────────────
+  const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
+  const metaRegime = regime.regime ?? "UNKNOWN";
+
+  // ── STRATEGY GENOME V1 ────────────────────────────────────────────────────
+  if (!strategyGenome.isEnabled(metaStrategy)) {
+    this.log(
+      `🧬 STRATEGY GENOME BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+      `${metaStrategy} disabled`
+    );
+
+    await decisionJournal.record({
+      type: "BLOCKED",
+      stage: "META",
+      instrument: pairStat.instrument,
+      direction: finalAction,
+      confidence: finalConfidence,
+      strategy: metaStrategy,
+      regime: metaRegime,
+      reason: `Strategy genome disabled: ${metaStrategy}`,
+    });
+
+    return { stop: true };
+  }
+
+  // ── MARKET MEMORY V1 ───────────────────────────────────────────────────────
+  const memoryCheck = marketMemory.shouldBlock({
+    instrument: pairStat.instrument,
+    strategy: metaStrategy,
+    regime: metaRegime,
+    confidence: finalConfidence,
+    rsi: finalRsi,
+  });
+
+  if (memoryCheck.riskMultiplier < 1) {
+    const beforeRisk = effectiveRiskPct;
+
+    effectiveRiskPct = Math.max(
+      0.25,
+      effectiveRiskPct * memoryCheck.riskMultiplier
+    );
+
+    this.log(
+      `🧠 MEMORY RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
+      `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
+      memoryCheck.reason
+    );
+
+    await decisionJournal.record({
+      type: "RISK_REDUCED",
+      stage: "META",
+      instrument: pairStat.instrument,
+      direction: finalAction,
+      confidence: finalConfidence,
+      riskPct: effectiveRiskPct,
+      strategy: metaStrategy,
+      regime: metaRegime,
+      reason: `Market memory: ${memoryCheck.reason}`,
+      extra: {
+        beforeRiskPct: beforeRisk,
+        afterRiskPct: effectiveRiskPct,
+        riskMultiplier: memoryCheck.riskMultiplier,
+        similar: memoryCheck.similar,
+      },
+    });
+  } else {
+    this.log(
+      `🧠 MEMORY OK: ${pairStat.instrument} ${finalAction} — ` +
+      memoryCheck.reason
+    );
+  }
+
+  // ── STRATEGY-REGIME MATRIX V1 ─────────────────────────────────────────────
+  const matrixCheck = strategyRegimeMatrix.shouldBlock(metaStrategy, metaRegime);
+
+  if (matrixCheck.blocked) {
+    this.log(
+      `🧬 MATRIX BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+      matrixCheck.reason
+    );
+
+    await decisionJournal.record({
+      type: "BLOCKED",
+      stage: "META",
+      instrument: pairStat.instrument,
+      direction: finalAction,
+      confidence: finalConfidence,
+      strategy: metaStrategy,
+      regime: metaRegime,
+      reason: `Strategy-regime matrix block: ${matrixCheck.reason}`,
+      extra: matrixCheck.cell,
+    });
+
+    return { stop: true };
+  }
+
+  this.log(
+    `🧬 MATRIX OK: ${pairStat.instrument} ${finalAction} — ` +
+    matrixCheck.reason
+  );
+
+  return { stop: false, effectiveRiskPct, metaStrategy, metaRegime, memoryScore: memoryCheck.similar?.score };
+}
+
 private async scanPair(pairStat: PairStats, openTrades: OpenTrade[]) {
+
     if (!this.api) return;
     if (this.currentAudit) this.currentAudit.scanned++;
     try {
@@ -1821,146 +1985,23 @@ this.log(
         return;
       }
 
-// ── ADAPTIVE KELLY POSITION SIZING ─────────────────────────────────────────────
-let effectiveRiskPct = cfg.riskPercent;
-if (portfolioManager.riskMultiplier < 1) {
-  const beforeRisk = effectiveRiskPct;
-  effectiveRiskPct *= portfolioManager.riskMultiplier;
-
-  this.log(
-    `🧠 PORTFOLIO MANAGER RISK: ${pairStat.instrument} ${finalAction} — ` +
-    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
-    portfolioManager.reason
-  );
-}
-const recentTrades = this.state.tradeHistory.slice(-30);
-
-if (recentTrades.length >= 15) {
-  const wins = recentTrades.filter(t => t.pnl > 0);
-  const losses = recentTrades.filter(t => t.pnl < 0);
-
-  if (wins.length >= 5 && losses.length >= 3) {
-    const winRate = wins.length / recentTrades.length;
-    const avgWin = wins.reduce((s, t) => s + t.pnl, 0) / wins.length;
-    const avgLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0) / losses.length);
-    const rr = avgLoss > 0 ? avgWin / avgLoss : 1;
-    const kelly = winRate - (1 - winRate) / rr;
-    const fractionalKelly = Math.max(0.005, Math.min(kelly * 0.25, 0.02));
-
-    effectiveRiskPct = fractionalKelly * 100;
-
-    const recentLosses = recentTrades.slice(-5).filter(t => t.pnl < 0).length;
-    if (recentLosses >= 4) effectiveRiskPct *= 0.5;
-    else if (recentLosses >= 3) effectiveRiskPct *= 0.7;
-
-    this.log(
-      `📊 Kelly sizing ${pairStat.instrument}: WR ${(winRate * 100).toFixed(0)}% ` +
-      `RR ${rr.toFixed(2)} → risk ${effectiveRiskPct.toFixed(2)}%`
-    );
-  }
-}
-
-// ── META CONTEXT ───────────────────────────────────────────────────────────
-const metaStrategy = stratSignal.strategy ?? "UNKNOWN";
-const metaRegime = regime.regime ?? "UNKNOWN";
-
-// ── STRATEGY GENOME V1 ────────────────────────────────────────────────────
-if (!strategyGenome.isEnabled(metaStrategy)) {
-  this.log(
-    `🧬 STRATEGY GENOME BLOCK: ${pairStat.instrument} ${finalAction} — ` +
-    `${metaStrategy} disabled`
-  );
-
-  await decisionJournal.record({
-    type: "BLOCKED",
-    stage: "META",
-    instrument: pairStat.instrument,
-    direction: finalAction,
-    confidence: finalConfidence,
-    strategy: metaStrategy,
-    regime: metaRegime,
-    reason: `Strategy genome disabled: ${metaStrategy}`,
-  });
-
-  return;
-}
-
-// ── MARKET MEMORY V1 ───────────────────────────────────────────────────────
-const memoryCheck = marketMemory.shouldBlock({
-  instrument: pairStat.instrument,
-  strategy: metaStrategy,
-  regime: metaRegime,
-  confidence: finalConfidence,
-  rsi: finalRsi,
+const sizingResult = await this.runPositionSizingAndStrategyChecks({
+  pairStat,
+  finalAction,
+  finalConfidence,
+  finalRsi,
+  regime,
+  stratSignal,
+  portfolioManagerRiskMultiplier,
+  portfolioManagerReason,
 });
 
-if (memoryCheck.riskMultiplier < 1) {
-  const beforeRisk = effectiveRiskPct;
+if (sizingResult.stop) return;
 
-  effectiveRiskPct = Math.max(
-    0.25,
-    effectiveRiskPct * memoryCheck.riskMultiplier
-  );
-
-  this.log(
-    `🧠 MEMORY RISK ADJUST: ${pairStat.instrument} ${finalAction} — ` +
-    `${beforeRisk.toFixed(2)}% → ${effectiveRiskPct.toFixed(2)}% | ` +
-    memoryCheck.reason
-  );
-
-  await decisionJournal.record({
-    type: "RISK_REDUCED",
-    stage: "META",
-    instrument: pairStat.instrument,
-    direction: finalAction,
-    confidence: finalConfidence,
-    riskPct: effectiveRiskPct,
-    strategy: metaStrategy,
-    regime: metaRegime,
-    reason: `Market memory: ${memoryCheck.reason}`,
-    extra: {
-      beforeRiskPct: beforeRisk,
-      afterRiskPct: effectiveRiskPct,
-      riskMultiplier: memoryCheck.riskMultiplier,
-      similar: memoryCheck.similar,
-    },
-  });
-} else {
-  this.log(
-    `🧠 MEMORY OK: ${pairStat.instrument} ${finalAction} — ` +
-    memoryCheck.reason
-  );
-}
-
-
-// ── STRATEGY-REGIME MATRIX V1 ─────────────────────────────────────────────
-const matrixCheck = strategyRegimeMatrix.shouldBlock(metaStrategy, metaRegime);
-
-if (matrixCheck.blocked) {
-  this.log(
-    `🧬 MATRIX BLOCK: ${pairStat.instrument} ${finalAction} — ` +
-    matrixCheck.reason
-  );
-
-  await decisionJournal.record({
-    type: "BLOCKED",
-    stage: "META",
-    instrument: pairStat.instrument,
-    direction: finalAction,
-    confidence: finalConfidence,
-    strategy: metaStrategy,
-    regime: metaRegime,
-    reason: `Strategy-regime matrix block: ${matrixCheck.reason}`,
-    extra: matrixCheck.cell,
-  });
-
-  return;
-}
-
-this.log(
-  `🧬 MATRIX OK: ${pairStat.instrument} ${finalAction} — ` +
-  matrixCheck.reason
-);
+let effectiveRiskPct = sizingResult.effectiveRiskPct;
+const metaStrategy = sizingResult.metaStrategy;
+const metaRegime = sizingResult.metaRegime;
+const memoryScore = sizingResult.memoryScore;
 
 // ── META APPROVAL LAYER V1 ────────────────────────────────────────────────
 const metaApproval = evaluateMetaApproval({
@@ -2583,7 +2624,7 @@ const athenaConfidence = evaluateAthenaConfidence({
   pairScore: thresholdPairLearning?.score,
   strategyScore: metaApproval.components.strategyScore,
   regimeScore: metaApproval.components.regimeScore,
-  memoryScore: memoryCheck.similar?.score,
+  memoryScore: memoryScore,
   confidenceCalibration:
     thresholdConfidenceCalibration?.calibratedScore,
   trendScore: regime.trendScore,
@@ -2609,7 +2650,7 @@ const athenaQuality = evaluateTradeQuality({
   pairScore: thresholdPairLearning?.score,
   strategyScore: metaApproval.components.strategyScore,
   regimeScore: metaApproval.components.regimeScore,
-  memoryScore: memoryCheck.similar?.score,
+  memoryScore: memoryScore,
   portfolioScore: Math.max(
     0,
     Math.min(1, 1 - (portfolioCheck.projectedHeatPct ?? 0) / 4)
