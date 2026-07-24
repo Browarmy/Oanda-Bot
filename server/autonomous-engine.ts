@@ -1643,18 +1643,29 @@ if (this.currentAudit) this.currentAudit.signalsFound++;
         const h4ema50arr = ema(h4closes, 50);
         const h4ema50 = h4ema50arr[h4ema50arr.length - 1];
         const h4lastClose = h4closes[h4closes.length - 1];
-        if (finalAction === "BUY" && h4lastClose < h4ema50) {
-  this.log(`🚫 H4 FILTER: ${pairStat.instrument} BUY blocked — counter-trend`);
-  if (this.currentAudit) recordTradeBlock(this.currentAudit, "H4_FILTER");
-  return;
-}
-        if (finalAction === "SELL" && h4lastClose > h4ema50) {
-  this.log(`🚫 H4 FILTER: ${pairStat.instrument} SELL blocked — counter-trend`);
-  if (this.currentAudit) recordTradeBlock(this.currentAudit, "H4_FILTER");
-  return;
-}
-        this.log(`✅ H4 aligned: ${pairStat.instrument} ${finalAction} (EMA50: ${h4ema50.toFixed(5)})`);
+        const h4CounterTrend =
+          (finalAction === "BUY" && h4lastClose < h4ema50) ||
+          (finalAction === "SELL" && h4lastClose > h4ema50);
+        if (h4CounterTrend) {
+          const beforeH4Confidence = finalConfidence;
+          finalConfidence = Math.max(0, finalConfidence - 0.10);
+          this.log(
+            `🚫 H4 SIZED DOWN (not blocked): ${pairStat.instrument} ${finalAction} — counter-trend | ` +
+            `${(beforeH4Confidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}%`
+          );
+          await decisionJournal.record({
+            type: "RISK_REDUCED",
+            stage: "SIGNAL",
+            instrument: pairStat.instrument,
+            direction: finalAction,
+            confidence: finalConfidence,
+            reason: `H4 counter-trend (sized down, not blocked): EMA50 ${h4ema50.toFixed(5)}`,
+          });
+        } else {
+          this.log(`✅ H4 aligned: ${pairStat.instrument} ${finalAction} (EMA50: ${h4ema50.toFixed(5)})`);
+        }
       }
+
       // ───────────────────────────────────────────────────────────────────────
 
 
