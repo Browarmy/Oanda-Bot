@@ -22,11 +22,13 @@ export function forecastMarketState(input: {
 
   score = Math.max(0, Math.min(100, score));
 
-  if (input.riskMood === "DANGEROUS") reasons.push("dangerous risk mood");
-  if (input.volatilityScore > 0.75) reasons.push("high volatility");
-  if (input.regimeConfidence < 0.35) reasons.push("low regime confidence");
-  if (input.trendScore > 0.65) reasons.push("trend support");
-  if (input.breakoutScore > 0.65) reasons.push("breakout support");
+if (input.riskMood === "DANGEROUS") reasons.push("dangerous risk mood");
+if (input.volatilityScore > 0.75) reasons.push("high volatility");
+if (input.regimeConfidence < 0.35) reasons.push("low regime confidence");
+if (input.trendScore > 0.65) reasons.push("trend support");
+if (input.breakoutScore > 0.65) reasons.push("breakout support");
+if (input.regime === "NEUTRAL") reasons.push("neutral regime");
+
 
   const approved = score >= 55;
 
