@@ -2173,14 +2173,12 @@ const marketForecast = forecastMarketState({
 
 if (!marketForecast.approved) {
   this.log(
-    `🔮 FORECAST BLOCK: ${pairStat.instrument} ${finalAction} — ` +
+    `🔮 FORECAST SIZED DOWN (not blocked): ${pairStat.instrument} ${finalAction} — ` +
     `${marketForecast.forecast} ${marketForecast.score}/100 | ${marketForecast.reason}`
   );
 
-  if (this.currentAudit) recordTradeBlock(this.currentAudit, "FORECAST");
-
   await decisionJournal.record({
-    type: "BLOCKED",
+    type: "RISK_REDUCED",
     stage: "SIGNAL",
     instrument: pairStat.instrument,
     direction: finalAction,
@@ -2189,12 +2187,11 @@ if (!marketForecast.approved) {
     riskPct: effectiveRiskPct,
     strategy: metaStrategy,
     regime: metaRegime,
-    reason: `Forecast block: ${marketForecast.reason}`,
+    reason: `Forecast unfavourable (sized down, not blocked): ${marketForecast.reason}`,
     extra: { marketForecast },
   });
-
-  return;
 }
+
 
 const beforeForecastConfidence = finalConfidence;
 
