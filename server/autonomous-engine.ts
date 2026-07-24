@@ -1992,8 +1992,8 @@ const sizingResult = await this.runPositionSizingAndStrategyChecks({
   finalRsi,
   regime,
   stratSignal,
-  portfolioManagerRiskMultiplier,
-  portfolioManagerReason,
+portfolioManagerRiskMultiplier: portfolioManager.riskMultiplier,
+portfolioManagerReason: portfolioManager.reason,
 });
 
 if (sizingResult.stop) return;
