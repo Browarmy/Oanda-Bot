@@ -1538,7 +1538,7 @@ this.log(
         finalRsi = activeSignal.rsi; finalAtr = activeSignal.atr;
         finalEma9 = activeSignal.ema9; finalEma21 = activeSignal.ema21;
         finalMacd = activeSignal.macd; finalBbPos = activeSignal.bbPosition;
-        finalTrend = legacySignal.trend;
+        finalTrend = activeSignal.action === "BUY" ? "BULLISH" : "BEARISH";
       } else if (legacyFired && legacySignal.confidence >= 0.78) {
         // Legacy signal alone
         finalAction = legacySignal.action;
