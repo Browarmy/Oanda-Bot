@@ -28,7 +28,7 @@ export interface PortfolioIntelligenceResult {
 
 const DEFAULT_CONFIG: PortfolioIntelligenceConfig = {
   maxPortfolioHeatPct: 4.0,
-  maxSingleCurrencyExposurePct: 250,
+  maxSingleCurrencyExposurePct: 5.0,
   maxSameCurrencyDirectionalTrades: 2,
 };
 
@@ -64,8 +64,25 @@ function tradeRiskValue(trade: PortfolioTrade, equity: number): number {
 }
 
 
-function tradeNotionalValue(trade: PortfolioTrade): number {
-  return Math.abs(trade.entryPrice * trade.units);
+const APPROX_JPY_PER_USD = 150;
+
+function tradeRiskInUsd(trade: PortfolioTrade): number {
+  if (trade.stopLoss <= 0) return 0;
+  const slDist = Math.abs(trade.entryPrice - trade.stopLoss);
+  const riskInQuoteCurrency = slDist * trade.units;
+
+  const { base, quote } = splitInstrument(trade.instrument);
+
+  if (quote === "USD") {
+    return riskInQuoteCurrency;
+  }
+  if (base === "USD") {
+    return riskInQuoteCurrency / trade.entryPrice;
+  }
+  if (quote === "JPY") {
+    return riskInQuoteCurrency / APPROX_JPY_PER_USD;
+  }
+  return riskInQuoteCurrency;
 }
 
 function addExposure(
@@ -75,8 +92,8 @@ function addExposure(
   equity: number
 ) {
   const { base, quote } = splitInstrument(trade.instrument);
-  const notionalPct =
-    equity > 0 ? (tradeNotionalValue(trade) / equity) * 100 : 0;
+  const riskPct =
+    equity > 0 ? (tradeRiskInUsd(trade) / equity) * 100 : 0;
 
   const baseKey =
     trade.direction === "BUY"
@@ -88,12 +105,13 @@ function addExposure(
       ? `${quote}_SHORT`
       : `${quote}_LONG`;
 
-  exposure[base] = (exposure[base] ?? 0) + notionalPct;
-  exposure[quote] = (exposure[quote] ?? 0) + notionalPct;
+  exposure[base] = (exposure[base] ?? 0) + riskPct;
+  exposure[quote] = (exposure[quote] ?? 0) + riskPct;
 
   directionalCounts[baseKey] = (directionalCounts[baseKey] ?? 0) + 1;
   directionalCounts[quoteKey] = (directionalCounts[quoteKey] ?? 0) + 1;
 }
+
 
 export function analysePortfolioIntelligence(
   openTrades: PortfolioTrade[],
