@@ -2506,10 +2506,11 @@ openTrades.map(t => ({
   this.state.accountEquity,
   {
     maxPortfolioHeatPct: 4.0,
-    maxSingleCurrencyExposurePct: 250,
+    maxSingleCurrencyExposurePct: 5.0,
     maxSameCurrencyDirectionalTrades: 2,
   }
 );
+
 
 if (!portfolioCheck.approved) {
   decisionJournal.record({
